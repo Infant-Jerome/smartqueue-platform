@@ -1,0 +1,60 @@
+Table users {
+  id int [pk, increment]
+  name varchar(100) [not null]
+  email varchar(255) [unique, not null]
+  password_hash varchar(255) [not null]
+  phone varchar(20)
+  role varchar(20) [not null]
+  created_at datetime
+}
+
+Table barbers {
+  id int [pk, increment]
+  name varchar(100) [not null]
+  specialization varchar(255)
+  phone varchar(20)
+  status varchar(20) [not null]
+  created_at datetime
+}
+
+Table services {
+  id int [pk, increment]
+  name varchar(100) [not null]
+  description text
+  duration int [not null]
+  price decimal(10,2) [not null]
+  status varchar(20) [not null]
+  created_at datetime
+}
+
+Table appointments {
+  id int [pk, increment]
+  user_id int [not null]
+  barber_id int [not null]
+  service_id int [not null]
+  appointment_date date [not null]
+  appointment_time time [not null]
+  status varchar(20) [not null]
+  queue_number int
+  created_at datetime
+  updated_at datetime
+}
+
+Table queue {
+  id int [pk, increment]
+  appointment_id int [not null, unique]
+  queue_number int [not null]
+  estimated_wait_time int
+  status varchar(20) [not null]
+  created_at datetime
+  updated_at datetime
+}
+
+Ref: users.id < appointments.user_id
+Ref: barbers.id < appointments.barber_id
+Ref: services.id < appointments.service_id
+Ref: appointments.id - queue.appointment_id
+
+Indexes {
+  (barbers.id, appointments.user_id, services.id) [pk] @fake
+}
