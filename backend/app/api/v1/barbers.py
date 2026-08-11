@@ -1,29 +1,29 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.models.models import Barber
-from app.schemas.schemas import BarberCreate, BarberUpdate, BarberResponse, MessageResponse
-from app.api.deps import get_current_user, require_role
-from app.models.models import User
+from app.core.response import ok
+from app.models.models import Barber, User
+from app.schemas.schemas import BarberCreate, BarberUpdate, BarberResponse, ApiResponse
+from app.api.deps import require_role
 
 router = APIRouter()
 
 
-@router.get("", response_model=list[BarberResponse])
+@router.get("", response_model=ApiResponse)
 def list_barbers(db: Session = Depends(get_db)):
     barbers = db.query(Barber).filter(Barber.status != "inactive").all()
-    return [BarberResponse.model_validate(b) for b in barbers]
+    return ok([BarberResponse.model_validate(b) for b in barbers])
 
 
-@router.get("/{barber_id}", response_model=BarberResponse)
+@router.get("/{barber_id}", response_model=ApiResponse)
 def get_barber(barber_id: int, db: Session = Depends(get_db)):
     barber = db.query(Barber).filter(Barber.id == barber_id).first()
     if not barber:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Barber not found")
-    return BarberResponse.model_validate(barber)
+    return ok(BarberResponse.model_validate(barber))
 
 
-@router.post("", response_model=BarberResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ApiResponse, status_code=status.HTTP_201_CREATED)
 def create_barber(
     barber_data: BarberCreate,
     db: Session = Depends(get_db),
@@ -38,10 +38,10 @@ def create_barber(
     db.add(barber)
     db.commit()
     db.refresh(barber)
-    return BarberResponse.model_validate(barber)
+    return ok(BarberResponse.model_validate(barber))
 
 
-@router.put("/{barber_id}", response_model=BarberResponse)
+@router.put("/{barber_id}", response_model=ApiResponse)
 def update_barber(
     barber_id: int,
     barber_data: BarberUpdate,
@@ -58,10 +58,10 @@ def update_barber(
 
     db.commit()
     db.refresh(barber)
-    return BarberResponse.model_validate(barber)
+    return ok(BarberResponse.model_validate(barber))
 
 
-@router.delete("/{barber_id}", response_model=MessageResponse)
+@router.delete("/{barber_id}", response_model=ApiResponse)
 def delete_barber(
     barber_id: int,
     db: Session = Depends(get_db),
@@ -73,4 +73,4 @@ def delete_barber(
 
     db.delete(barber)
     db.commit()
-    return MessageResponse(success=True, message="Barber deleted successfully")
+    return ok(None, message="Barber deleted successfully")

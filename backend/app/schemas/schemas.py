@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime, date, time
-from typing import Optional
+from typing import Any, Optional
 
 
 class UserCreate(BaseModel):
@@ -138,3 +138,9 @@ class MessageResponse(BaseModel):
     success: bool
     message: str
     data: Optional[dict | list | None] = None
+
+
+class ApiResponse(BaseModel):
+    success: bool = True
+    message: str = "OK"
+    data: Optional[Any] = None
