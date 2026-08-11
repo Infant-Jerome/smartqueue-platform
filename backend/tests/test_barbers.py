@@ -4,14 +4,14 @@
 def test_list_barbers_public(client, seeded_data):
     res = client.get("/api/v1/barbers")
     assert res.status_code == 200
-    assert any(b["name"] == "Arun" for b in res.json())
+    assert any(b["name"] == "Arun" for b in res.json()["data"])
 
 
 def test_get_barber(client, seeded_data):
     barber_id = seeded_data["barber"].id
     res = client.get(f"/api/v1/barbers/{barber_id}")
     assert res.status_code == 200
-    assert res.json()["specialization"] == "Haircut & Styling"
+    assert res.json()["data"]["specialization"] == "Haircut & Styling"
 
 
 def test_get_barber_missing(client):
@@ -35,7 +35,7 @@ def test_create_barber_as_admin(client, admin_headers):
         headers=admin_headers,
     )
     assert res.status_code == 201
-    assert res.json()["name"] == "Teja"
+    assert res.json()["data"]["name"] == "Teja"
 
 
 def test_update_barber_as_admin(client, admin_headers, seeded_data):
@@ -44,7 +44,7 @@ def test_update_barber_as_admin(client, admin_headers, seeded_data):
         f"/api/v1/barbers/{barber_id}", json={"status": "busy"}, headers=admin_headers
     )
     assert res.status_code == 200
-    assert res.json()["status"] == "busy"
+    assert res.json()["data"]["status"] == "busy"
 
 
 def test_delete_barber_as_admin(client, admin_headers, seeded_data):

@@ -12,7 +12,7 @@ def test_register_creates_customer(client):
         },
     )
     assert res.status_code == 201
-    data = res.json()
+    data = res.json()["data"]
     assert data["access_token"]
     assert data["user"]["email"] == "new@test.com"
     assert data["user"]["role"] == "customer"
@@ -27,7 +27,7 @@ def test_register_duplicate_email_rejected(client):
     assert client.post("/api/v1/auth/register", json=payload).status_code == 201
     res = client.post("/api/v1/auth/register", json=payload)
     assert res.status_code == 400
-    assert "already registered" in res.json()["detail"].lower()
+    assert "already registered" in res.json()["message"].lower()
 
 
 def test_login_success(client, customer_user):
@@ -36,7 +36,7 @@ def test_login_success(client, customer_user):
         json={"email": "customer@test.com", "password": "customerpass"},
     )
     assert res.status_code == 200
-    data = res.json()
+    data = res.json()["data"]
     assert data["access_token"]
     assert data["user"]["id"] == customer_user.id
 
@@ -57,4 +57,4 @@ def test_me_requires_valid_token(client):
 def test_me_with_token(client, customer_headers):
     res = client.get("/api/v1/auth/me", headers=customer_headers)
     assert res.status_code == 200
-    assert res.json()["email"] == "customer@test.com"
+    assert res.json()["data"]["email"] == "customer@test.com"

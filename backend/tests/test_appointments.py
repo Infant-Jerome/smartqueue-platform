@@ -22,7 +22,7 @@ def booking_payload(seeded_data, date_str=None, time_str="10:00"):
 def test_create_appointment(client, customer_headers, seeded_data):
     res = client.post("/api/v1/appointments", json=booking_payload(seeded_data), headers=customer_headers)
     assert res.status_code == 201
-    data = res.json()
+    data = res.json()["data"]
     assert data["status"] == "booked"
     assert data["queue_number"] == 1
 
@@ -34,7 +34,7 @@ def test_create_appointment_in_past_rejected(client, customer_headers, seeded_da
         headers=customer_headers,
     )
     assert res.status_code == 400
-    assert "past" in res.json()["detail"].lower()
+    assert "past" in res.json()["message"].lower()
 
 
 def test_double_booking_conflict(client, customer_headers, seeded_data):
@@ -59,12 +59,12 @@ def test_same_customer_same_time_conflict(client, customer_headers, db_session, 
     second["barber_id"] = other_barber.id
     res = client.post("/api/v1/appointments", json=second, headers=customer_headers)
     assert res.status_code == 409
-    assert "already have an appointment" in res.json()["detail"].lower()
+    assert "already have an appointment" in res.json()["message"].lower()
 
 
 def test_customer_can_only_cancel_own_appointment(client, customer_headers, seeded_data):
     res = client.post("/api/v1/appointments", json=booking_payload(seeded_data), headers=customer_headers)
-    appointment_id = res.json()["id"]
+    appointment_id = res.json()["data"]["id"]
 
     res = client.put(
         f"/api/v1/appointments/{appointment_id}",
@@ -79,7 +79,7 @@ def test_customer_can_only_cancel_own_appointment(client, customer_headers, seed
         headers=customer_headers,
     )
     assert res.status_code == 200
-    assert res.json()["status"] == "cancelled"
+    assert res.json()["data"]["status"] == "cancelled"
 
 
 def test_list_appointments_scoped_to_customer(
@@ -103,7 +103,7 @@ def test_list_appointments_scoped_to_customer(
         token_res = client.post(
             "/api/v1/auth/login", json={"email": user.email, "password": password}
         )
-        headers = {"Authorization": f"Bearer {token_res.json()['access_token']}"}
+        headers = {"Authorization": f"Bearer {token_res.json()['data']['access_token']}"}
         return client.post(
             "/api/v1/appointments",
             json=booking_payload(seeded_data, time_str="10:00" if user is customer_user else "11:00"),
@@ -115,5 +115,5 @@ def test_list_appointments_scoped_to_customer(
 
     res = client.get("/api/v1/appointments", headers=customer_headers)
     assert res.status_code == 200
-    booked_for_customer = [a["id"] for a in res.json()]
+    booked_for_customer = [a["id"] for a in res.json()["data"]]
     assert len(booked_for_customer) == 1
