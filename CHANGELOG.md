@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.0] - 2026-08-12
+
+### Added
+- Uniform JSON response envelope `{success, data, message}` across all API endpoints
+- Business-logic services layer (app/services: appointments_service, queue_service) with thin routers
+
+### Changed
+- README: environment variables table, running-tests command, API docs links
+
+### Fixed
+- Frontend axios unwraps the response envelope so pages work unchanged
+
 ## [1.0.0] - 2026-08-12
 
 ### Added
