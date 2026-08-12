@@ -43,7 +43,7 @@ export default function BookAppointment() {
       });
       navigate('/queue');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Booking failed');
+      setError(err.response?.data?.message || err.message || 'Booking failed');
     } finally {
       setSubmitting(false);
     }

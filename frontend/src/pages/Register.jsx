@@ -19,7 +19,7 @@ export default function Register() {
       await register(form.name, form.email, form.password, form.phone || undefined);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Registration failed');
+      setError(err.response?.data?.message || err.message || 'Registration failed');
     } finally {
       setLoading(false);
     }
