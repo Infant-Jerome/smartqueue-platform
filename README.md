@@ -81,6 +81,7 @@ The application provides an automated queue assignment and live tracking mechani
 
 - RESTful APIs at `/api/v1`
 - Swagger UI at `/docs`, ReDoc at `/redoc`
+- Uniform JSON response envelope: `{ "success": boolean, "data": ..., "message": "..." }` across all endpoints
 
 ### Testing
 
@@ -154,12 +155,14 @@ npm run dev     # http://localhost:5173 (proxies /api -> http://localhost:8000)
 | Admin | `admin@salon.com` | `Admin@123` |
 | Customer | `jerome@salon.com` | `Jerome@123` |
 
-### Running tests
+## Running Tests
 
 ```bash
 cd backend
-pytest -v
+python -m pytest -v    # or just: pytest -v
 ```
+
+Tests run against an isolated temporary SQLite database, so no setup or local DB state is required.
 
 ## Database & migrations
 
@@ -172,6 +175,34 @@ cd backend
 alembic revision --autogenerate -m "message"
 alembic upgrade head
 ```
+
+## Environment Variables
+
+The app is configured through environment variables (loaded from a `.env` file). Example files exist at the repository root (`.env.example`) and in `backend/.env.example`. All variables listed below have sensible defaults except `JWT_SECRET_KEY`.
+
+| Variable | Description | Required |
+| --- | --- | --- |
+| `DATABASE_TYPE` | Database dialect: `sqlite` (default) or `mysql` | N |
+| `DATABASE_HOST` | Database host (MySQL only) | N |
+| `DATABASE_PORT` | Database port (MySQL only) | N |
+| `DATABASE_USER` | Database user (MySQL only) | N |
+| `DATABASE_PASSWORD` | Database password (MySQL only) | N |
+| `DATABASE_NAME` | Database name (MySQL only) | N |
+| `JWT_SECRET_KEY` | Secret used to sign/verify JWTs | Y |
+| `JWT_EXPIRE_MINUTES` | Access token lifetime in minutes | N |
+| `APP_NAME` | Application display name | N |
+| `APP_VERSION` | Application version string | N |
+| `DEBUG` | Enable debug mode (`true`/`false`) | N |
+| `CORS_ORIGINS` | Comma-separated allowed CORS origins | N |
+
+## API Documentation
+
+FastAPI auto-generates interactive docs once the backend is running:
+
+- Swagger UI: <http://localhost:8000/docs>
+- ReDoc: <http://localhost:8000/redoc>
+
+All business endpoints are served under the base path `/api/v1`, and the health check lives at `/api/health`.
 
 ## API overview
 
