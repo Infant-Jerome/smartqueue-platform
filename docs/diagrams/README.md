@@ -1,11 +1,11 @@
 # SmartQueue — Diagrams
 
-This folder contains the rendered diagrams (PNG), their editable sources (`.drawio` / `.dbml`), and the Mermaid sources below as text fallbacks. Open the `.drawio` files in <https://app.diagrams.net> and the `.dbml` file in <https://dbdiagram.io>.
+This folder contains the rendered diagrams (PNG), their editable sources (`.drawio` / `.dbml` / `.mmd`), and the Mermaid sources below as text fallbacks. Open the `.drawio` files in <https://app.diagrams.net>, the `.dbml` file in <https://dbdiagram.io>, and the `.mmd` file at <https://mermaid.live>.
 
 | Diagram | PNG | Editable source |
 | --- | --- | --- |
 | System architecture | [SmartQueueArchi.png](./SmartQueueArchi.png) | [SmartQueueArchi.drawio](./SmartQueueArchi.drawio) |
-| Entity Relationship | [SmartQueueER.png](./SmartQueueER.png) | [SmartQueueER.dbml](./SmartQueueER.dbml) |
+| Entity Relationship | [SmartQueueER.png](./SmartQueueER.png) | [SmartQueueER.dbml](./SmartQueueER.dbml), [SmartQueueER.mmd](./SmartQueueER.mmd) |
 | UML class diagram | [SmartQueueClassDia.png](./SmartQueueClassDia.png) | [SmartQueueClassDia.drawio](./SmartQueueClassDia.drawio) |
 
 The Mermaid sources below render the same content at https://mermaid.live or in any Mermaid-capable viewer.
@@ -62,62 +62,101 @@ flowchart LR
 
 ## 2. Entity Relationship Diagram (ERD)
 
+The ER diagram visualizes the 5-table schema. `appointments` is the central entity linking customers, barbers, and services, while `queue` provides 1:1 live queue tracking per appointment.
+
 ```mermaid
 erDiagram
     users {
-        int id PK
-        string name
-        string email UK
-        string password_hash
-        string phone
-        string role
-        datetime created_at
-    }
-    barbers {
-        int id PK
-        string name
-        string specialization
-        string phone
-        string status
-        datetime created_at
-    }
-    services {
-        int id PK
-        string name
-        string description
-        int duration
-        numeric price
-        string status
-        datetime created_at
-    }
-    appointments {
-        int id PK
-        int user_id FK
-        int barber_id FK
-        int service_id FK
-        date appointment_date
-        time appointment_time
-        string status
-        int queue_number
-        datetime created_at
-        datetime updated_at
-        unique (barber_id, appointment_date, appointment_time)
-    }
-    queue {
-        int id PK
-        int appointment_id FK, UK
-        int queue_number
-        int estimated_wait_time
-        string status
-        datetime created_at
-        datetime updated_at
+        int id PK "Auto-increment"
+        varchar name "NOT NULL, max 100"
+        varchar email UK "NOT NULL, unique, indexed"
+        varchar password_hash "NOT NULL, bcrypt"
+        varchar phone "Nullable"
+        varchar role "NOT NULL, default: customer"
+        datetime created_at "NOT NULL, default: utcnow"
     }
 
-    users ||--o{ appointments : books
-    barbers ||--o{ appointments : serves
-    services ||--o{ appointments : provides
-    appointments ||--o| queue : has
+    barbers {
+        int id PK "Auto-increment"
+        varchar name "NOT NULL, max 100"
+        varchar specialization "Nullable"
+        varchar phone "Nullable"
+        varchar status "NOT NULL, default: available"
+        datetime created_at "NOT NULL, default: utcnow"
+    }
+
+    services {
+        int id PK "Auto-increment"
+        varchar name "NOT NULL, max 100"
+        text description "Nullable"
+        int duration "NOT NULL, minutes"
+        decimal price "NOT NULL, numeric(10,2)"
+        varchar status "NOT NULL, default: active"
+        datetime created_at "NOT NULL, default: utcnow"
+    }
+
+    appointments {
+        int id PK "Auto-increment"
+        int user_id FK "NOT NULL, FK -> users.id"
+        int barber_id FK "NOT NULL, FK -> barbers.id"
+        int service_id FK "NOT NULL, FK -> services.id"
+        date appointment_date "NOT NULL"
+        time appointment_time "NOT NULL"
+        varchar status "NOT NULL, default: booked"
+        int queue_number "Nullable, per-day sequence"
+        datetime created_at "NOT NULL, default: utcnow"
+        datetime updated_at "NOT NULL, auto-updated"
+    }
+
+    queue {
+        int id PK "Auto-increment"
+        int appointment_id FK "NOT NULL, unique, FK -> appointments.id"
+        int queue_number "NOT NULL, mirror of appointment"
+        int estimated_wait_time "Nullable, minutes"
+        varchar status "NOT NULL, default: waiting"
+        datetime created_at "NOT NULL, default: utcnow"
+        datetime updated_at "NOT NULL, auto-updated"
+    }
+
+    users ||--o{ appointments : "books (1:N)"
+    barbers ||--o{ appointments : "serves (1:N)"
+    services ||--o{ appointments : "provides (1:N)"
+    appointments ||--o| queue : "has (1:0..1)"
+
+    appointments }o--|| users : "belongs_to"
+    appointments }o--|| barbers : "assigned_to"
+    appointments }o--|| services : "uses"
+    queue }o--|| appointments : "tracks"
 ```
+
+### Table Summary
+
+| Table | Columns | PK | FKs | Unique Constraints |
+| --- | --- | --- | --- | --- |
+| `users` | id, name, email, password_hash, phone, role, created_at | id | — | email |
+| `barbers` | id, name, specialization, phone, status, created_at | id | — | — |
+| `services` | id, name, description, duration, price, status, created_at | id | — | — |
+| `appointments` | id, user_id, barber_id, service_id, appointment_date, appointment_time, status, queue_number, created_at, updated_at | id | user_id→users, barber_id→barbers, service_id→services | (barber_id, appointment_date, appointment_time) |
+| `queue` | id, appointment_id, queue_number, estimated_wait_time, status, created_at, updated_at | id | appointment_id→appointments | appointment_id |
+
+### Foreign Key Relationships
+
+| Parent | Child | FK Column | On Delete |
+| --- | --- | --- | --- |
+| `users` | `appointments` | `user_id` | CASCADE |
+| `barbers` | `appointments` | `barber_id` | CASCADE |
+| `services` | `appointments` | `service_id` | CASCADE |
+| `appointments` | `queue` | `appointment_id` | CASCADE |
+
+### Status Enums
+
+| Table | Column | Allowed Values |
+| --- | --- | --- |
+| `users` | `role` | customer, admin, staff |
+| `barbers` | `status` | available, busy, inactive |
+| `services` | `status` | active, inactive |
+| `appointments` | `status` | booked, waiting, serving, completed, cancelled, no_show |
+| `queue` | `status` | waiting, serving, completed |
 
 ---
 

@@ -1,60 +1,60 @@
 Table users {
   id int [pk, increment]
   name varchar(100) [not null]
-  email varchar(255) [unique, not null]
-  password_hash varchar(255) [not null]
-  phone varchar(20)
-  role varchar(20) [not null]
-  created_at datetime
+  email varchar(255) [unique, not null, note: 'Login credential']
+  password_hash varchar(255) [not null, note: 'bcrypt hash']
+  phone varchar(20, note: 'Optional contact phone']
+  role varchar(20) [not null, default: '"customer"', note: 'customer | admin | staff']
+  created_at datetime [not null, default: 'utcnow']
 }
 
 Table barbers {
   id int [pk, increment]
   name varchar(100) [not null]
-  specialization varchar(255)
-  phone varchar(20)
-  status varchar(20) [not null]
-  created_at datetime
+  specialization varchar(255, note: 'e.g. Haircut & Styling']
+  phone varchar(20, note: 'Contact phone']
+  status varchar(20) [not null, default: '"available"', note: 'available | busy | inactive']
+  created_at datetime [not null, default: 'utcnow']
 }
 
 Table services {
   id int [pk, increment]
   name varchar(100) [not null]
   description text
-  duration int [not null]
+  duration int [not null, note: 'Duration in minutes']
   price decimal(10,2) [not null]
-  status varchar(20) [not null]
-  created_at datetime
+  status varchar(20) [not null, default: '"active"', note: 'active | inactive']
+  created_at datetime [not null, default: 'utcnow']
 }
 
 Table appointments {
   id int [pk, increment]
-  user_id int [not null]
-  barber_id int [not null]
-  service_id int [not null]
+  user_id int [not null, note: 'FK -> users.id (CASCADE)']
+  barber_id int [not null, note: 'FK -> barbers.id (CASCADE)']
+  service_id int [not null, note: 'FK -> services.id (CASCADE)']
   appointment_date date [not null]
   appointment_time time [not null]
-  status varchar(20) [not null]
-  queue_number int
-  created_at datetime
-  updated_at datetime
+  status varchar(20) [not null, default: '"booked"', note: 'booked | waiting | serving | completed | cancelled | no_show']
+  queue_number int, note: 'Auto-assigned per-day sequence'
+  created_at datetime [not null, default: 'utcnow']
+  updated_at datetime [not null, default: 'utcnow']
 }
 
 Table queue {
   id int [pk, increment]
-  appointment_id int [not null, unique]
-  queue_number int [not null]
-  estimated_wait_time int
-  status varchar(20) [not null]
-  created_at datetime
-  updated_at datetime
+  appointment_id int [not null, unique, note: 'FK -> appointments.id (CASCADE)']
+  queue_number int [not null, note: 'Mirror of appointment queue_number']
+  estimated_wait_time int, note: 'Estimated wait in minutes'
+  status varchar(20) [not null, default: '"waiting"', note: 'waiting | serving | completed']
+  created_at datetime [not null, default: 'utcnow']
+  updated_at datetime [not null, default: 'utcnow']
 }
 
-Ref: users.id < appointments.user_id
-Ref: barbers.id < appointments.barber_id
-Ref: services.id < appointments.service_id
-Ref: appointments.id - queue.appointment_id
+Ref: users.id < appointments.user_id [note: 'One user books many appointments']
+Ref: barbers.id < appointments.barber_id [note: 'One barber serves many appointments']
+Ref: services.id < appointments.service_id [note: 'One service provides many appointments']
+Ref: appointments.id - queue.appointment_id [note: 'One appointment has zero or one queue entry']
 
 Indexes {
-  (barbers.id, appointments.user_id, services.id) [pk] @fake
+  (barber_id, appointment_date, appointment_time) [unique, note: 'Prevents double-booking a barber']
 }
