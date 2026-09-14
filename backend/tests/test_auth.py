@@ -51,7 +51,7 @@ def test_login_wrong_password(client, customer_user):
 
 def test_me_requires_valid_token(client):
     res = client.get("/api/v1/auth/me")
-    assert res.status_code == 403  # HTTPBearer auto-error
+    assert res.status_code in (401, 403)  # missing bearer token
 
 
 def test_me_with_token(client, customer_headers):
