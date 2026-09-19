@@ -1,4 +1,10 @@
-"""Tests for the appointments endpoints."""
+"""Tests for the appointments endpoints.
+
+Canonical Phase 1.1: appointments.appointment_id (customer_id,
+start_time/end_time). Payloads carry canonical start_time/end_time plus the
+legacy appointment_time alias so the suite passes both before and after the
+API migration lands; response assertions accept either key.
+"""
 from datetime import date, timedelta
 
 
@@ -11,20 +17,39 @@ def past_date():
 
 
 def booking_payload(seeded_data, date_str=None, time_str="10:00"):
+    start = time_str
+    end_h, end_m = int(start[:2]) + 0, int(start[3:5]) + 30
+    if end_m >= 60:
+        end_h += 1
+        end_m -= 60
+    end = f"{end_h:02d}:{end_m:02d}"
     return {
-        "barber_id": seeded_data["barber"].id,
-        "service_id": seeded_data["service"].id,
+        "barber_id": seeded_data["barber"].barber_id,
+        "service_id": seeded_data["service"].service_id,
         "appointment_date": date_str or future_date(),
-        "appointment_time": time_str,
+        # Canonical:
+        "start_time": start,
+        "end_time": end,
+        # Legacy alias (API transition):
+        "appointment_time": start,
     }
+
+
+def _aid(data):
+    return data.get("appointment_id", data.get("id"))
+
+
+def _qnum(data):
+    return data.get("queue_position", data.get("queue_number"))
 
 
 def test_create_appointment(client, customer_headers, seeded_data):
     res = client.post("/api/v1/appointments", json=booking_payload(seeded_data), headers=customer_headers)
-    assert res.status_code == 201
+    assert res.status_code == 201, res.text
     data = res.json()["data"]
     assert data["status"] == "booked"
-    assert data["queue_number"] == 1
+    assert _qnum(data) == 1
+    assert _aid(data) is not None
 
 
 def test_create_appointment_in_past_rejected(client, customer_headers, seeded_data):
@@ -45,9 +70,9 @@ def test_double_booking_conflict(client, customer_headers, seeded_data):
 
 
 def test_same_customer_same_time_conflict(client, customer_headers, db_session, seeded_data):
-    from app.models.models import Barber
+    from app.models.barber import Barber
 
-    other_barber = Barber(name="Kumar", specialization="Shaving", status="available")
+    other_barber = Barber(name="Kumar", specialization="Shaving", availability_status="available")
     db_session.add(other_barber)
     db_session.commit()
     db_session.refresh(other_barber)
@@ -56,7 +81,7 @@ def test_same_customer_same_time_conflict(client, customer_headers, db_session, 
     assert client.post("/api/v1/appointments", json=first, headers=customer_headers).status_code == 201
 
     second = booking_payload(seeded_data, time_str="10:00")
-    second["barber_id"] = other_barber.id
+    second["barber_id"] = other_barber.barber_id
     res = client.post("/api/v1/appointments", json=second, headers=customer_headers)
     assert res.status_code == 409
     assert "already have an appointment" in res.json()["message"].lower()
@@ -64,7 +89,8 @@ def test_same_customer_same_time_conflict(client, customer_headers, db_session, 
 
 def test_customer_can_only_cancel_own_appointment(client, customer_headers, seeded_data):
     res = client.post("/api/v1/appointments", json=booking_payload(seeded_data), headers=customer_headers)
-    appointment_id = res.json()["data"]["id"]
+    assert res.status_code == 201, res.text
+    appointment_id = _aid(res.json()["data"])
 
     res = client.put(
         f"/api/v1/appointments/{appointment_id}",
@@ -86,7 +112,7 @@ def test_list_appointments_scoped_to_customer(
     client, customer_user, customer_headers, db_session, seeded_data
 ):
     from app.core.security import hash_password
-    from app.models.models import User
+    from app.models.user import User
 
     other = User(
         name="Other",
@@ -115,5 +141,5 @@ def test_list_appointments_scoped_to_customer(
 
     res = client.get("/api/v1/appointments", headers=customer_headers)
     assert res.status_code == 200
-    booked_for_customer = [a["id"] for a in res.json()["data"]]
+    booked_for_customer = [_aid(a) for a in res.json()["data"]]
     assert len(booked_for_customer) == 1

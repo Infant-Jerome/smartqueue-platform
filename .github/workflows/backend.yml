@@ -1,0 +1,34 @@
+name: backend
+
+on:
+  push:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run pytest
+        run: python -m pytest -q
+      - name: Alembic upgrade check (fresh SQLite)
+        run: |
+          rm -f /tmp/smartqueue_ci.db
+          DATABASE_URL=sqlite:////tmp/smartqueue_ci.db alembic upgrade head
+          DATABASE_URL=sqlite:////tmp/smartqueue_ci.db alembic downgrade -1
+          DATABASE_URL=sqlite:////tmp/smartqueue_ci.db alembic upgrade head

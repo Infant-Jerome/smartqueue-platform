@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: smartqueue-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_TYPE
+        value: sqlite
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_EXPIRE_MINUTES
+        value: 60
+      - key: CORS_ORIGINS
+        value: http://localhost:5173
+      - key: DEBUG
+        value: False
+      - key: PYTHON_VERSION
+        value: 3.12.0

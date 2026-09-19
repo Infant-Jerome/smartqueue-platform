@@ -1,37 +1,11 @@
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
-from app.core.config import get_settings
+"""Backwards-compatibility shim: canonical implementation lives in app.db.*.
 
-settings = get_settings()
+All existing imports (``app.main``, ``app.models``, ``app.api``,
+``alembic/env.py``, ``seed.py``, ``tests/conftest.py``) keep working.
+New code should import from ``app.db.database`` / ``app.db.base`` directly.
+Single ``Base`` is defined in ``app.db.base`` — never redefined here.
+"""
+from app.db.base import Base
+from app.db.database import SessionLocal, create_tables, dispose_engine, engine, get_db
 
-if settings.DATABASE_TYPE == "mysql":
-    engine = create_engine(
-        settings.DATABASE_URL,
-        pool_pre_ping=True,
-        pool_recycle=3600,
-        echo=settings.DEBUG,
-    )
-else:
-    engine = create_engine(
-        settings.DATABASE_URL,
-        echo=settings.DEBUG,
-        connect_args={"check_same_thread": False},
-    )
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-class Base(DeclarativeBase):
-    pass
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-def create_tables():
-    Base.metadata.create_all(bind=engine)
+__all__ = ["Base", "engine", "SessionLocal", "get_db", "create_tables", "dispose_engine"]

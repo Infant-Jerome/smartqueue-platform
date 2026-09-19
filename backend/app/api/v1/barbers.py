@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.response import ok
-from app.models.models import Barber, User
+from app.models import Barber, User
 from app.schemas.schemas import BarberCreate, BarberUpdate, BarberResponse, ApiResponse
 from app.api.deps import require_role
 
@@ -11,13 +11,13 @@ router = APIRouter()
 
 @router.get("", response_model=ApiResponse)
 def list_barbers(db: Session = Depends(get_db)):
-    barbers = db.query(Barber).filter(Barber.status != "inactive").all()
+    barbers = db.query(Barber).filter(Barber.availability_status != "inactive").all()
     return ok([BarberResponse.model_validate(b) for b in barbers])
 
 
 @router.get("/{barber_id}", response_model=ApiResponse)
 def get_barber(barber_id: int, db: Session = Depends(get_db)):
-    barber = db.query(Barber).filter(Barber.id == barber_id).first()
+    barber = db.query(Barber).filter(Barber.barber_id == barber_id).first()
     if not barber:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Barber not found")
     return ok(BarberResponse.model_validate(barber))
@@ -33,7 +33,10 @@ def create_barber(
         name=barber_data.name,
         specialization=barber_data.specialization,
         phone=barber_data.phone,
-        status=barber_data.status or "available",
+        availability_status=barber_data.availability_status or "available",
+        salon_id=barber_data.salon_id,
+        user_id=barber_data.user_id,
+        experience_years=barber_data.experience_years or 0,
     )
     db.add(barber)
     db.commit()
@@ -48,7 +51,7 @@ def update_barber(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("admin")),
 ):
-    barber = db.query(Barber).filter(Barber.id == barber_id).first()
+    barber = db.query(Barber).filter(Barber.barber_id == barber_id).first()
     if not barber:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Barber not found")
 
@@ -67,7 +70,7 @@ def delete_barber(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("admin")),
 ):
-    barber = db.query(Barber).filter(Barber.id == barber_id).first()
+    barber = db.query(Barber).filter(Barber.barber_id == barber_id).first()
     if not barber:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Barber not found")
 

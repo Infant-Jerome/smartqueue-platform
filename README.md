@@ -138,7 +138,7 @@ uvicorn app.main:app --reload --port 8000
 
 - API base URL: `http://localhost:8000/api/v1`
 - Swagger UI: `http://localhost:8000/docs`
-- Health check: `http://localhost:8000/api/health`
+- Health check: `http://localhost:8000/api/health` (envelope `{success, data, message}` + `database: up/down` DB probe; 503 when DB is down)
 
 ### Frontend
 
@@ -147,6 +147,10 @@ cd frontend
 npm install
 npm run dev     # http://localhost:5173 (proxies /api -> http://localhost:8000)
 ```
+
+The frontend API base URL is configured via `VITE_API_BASE_URL` (see `frontend/.env.example`):
+- Dev: `VITE_API_BASE_URL=/api/v1` (relative, uses the Vite proxy)
+- Production: `VITE_API_BASE_URL=https://<your-render-api>/api/v1`
 
 ### Seeded demo accounts
 
@@ -166,13 +170,14 @@ Tests run against an isolated temporary SQLite database, so no setup or local DB
 
 ## Database & migrations
 
-By default the app uses SQLite (`backend/smartqueue.db`). For MySQL, set `DATABASE_TYPE=mysql` plus host/port/user/password/name in `backend/.env`.
+By default the app uses SQLite (`backend/smartqueue.db`). For MySQL, set `DATABASE_TYPE=mysql` plus host/port/user/password/name in `backend/.env`. For production (e.g. Render Postgres), set a full `DATABASE_URL` — it takes precedence over the field-based settings.
 
-Initial tables are auto-created on startup (`Base.metadata.create_all`). For schema changes Alembic is configured:
+Initial tables are auto-created on startup via the lifespan handler (`Base.metadata.create_all`). The baseline schema is also captured as an Alembic migration (`backend/alembic/versions/*_initial_schema.py`):
 
 ```bash
 cd backend
-alembic revision --autogenerate -m "message"
+alembic upgrade head            # apply baseline (verified on fresh SQLite)
+alembic revision --autogenerate -m "message"   # schema changes
 alembic upgrade head
 ```
 
@@ -182,18 +187,27 @@ The app is configured through environment variables (loaded from a `.env` file).
 
 | Variable | Description | Required |
 | --- | --- | --- |
-| `DATABASE_TYPE` | Database dialect: `sqlite` (default) or `mysql` | N |
+| `DATABASE_URL` | Full DB URL override (e.g. `postgresql+psycopg2://...` on Render). Takes precedence when set | N |
+| `DATABASE_TYPE` | Database dialect: `sqlite` (default) or `mysql` (fallback when `DATABASE_URL` is empty) | N |
 | `DATABASE_HOST` | Database host (MySQL only) | N |
 | `DATABASE_PORT` | Database port (MySQL only) | N |
 | `DATABASE_USER` | Database user (MySQL only) | N |
 | `DATABASE_PASSWORD` | Database password (MySQL only) | N |
 | `DATABASE_NAME` | Database name (MySQL only) | N |
 | `JWT_SECRET_KEY` | Secret used to sign/verify JWTs | Y |
+| `JWT_ALGORITHM` | JWT algorithm (default `HS256`) | N |
 | `JWT_EXPIRE_MINUTES` | Access token lifetime in minutes | N |
 | `APP_NAME` | Application display name | N |
 | `APP_VERSION` | Application version string | N |
 | `DEBUG` | Enable debug mode (`true`/`false`) | N |
-| `CORS_ORIGINS` | Comma-separated allowed CORS origins | N |
+| `CORS_ORIGINS` | Comma-separated allowed CORS origins (e.g. `https://app.vercel.app,http://localhost:5173`) | N |
+| `VITE_API_BASE_URL` | Frontend API base URL (frontend `.env`; `/api/v1` for dev, full Render URL for prod) | N |
+
+## Deployment & CI
+
+- Backend (Render): `render.yaml` builds `backend/requirements.txt` and starts with `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT`. Set `DATABASE_URL`, `JWT_SECRET_KEY`, and `CORS_ORIGINS` (your Vercel URL) in the Render dashboard. Health check path: `/api/health`.
+- Frontend (Vercel): `frontend/vercel.json` builds with `npm run build` (output `dist`). Set `VITE_API_BASE_URL=https://<your-render-api>/api/v1` in the Vercel project settings.
+- CI: `.github/workflows/backend.yml` runs pytest + a fresh-SQLite `alembic upgrade/downgrade/upgrade` cycle; `.github/workflows/frontend.yml` runs `npm ci`, `npm run lint`, and `npm run build`.
 
 ## API Documentation
 

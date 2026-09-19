@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.0] - 2026-09-14
+
+### Added
+- Alembic baseline migration `initial schema` (users, barbers, services, appointments, queue); verified `upgrade head` / `downgrade -1` / `upgrade head` on fresh SQLite
+- CI workflows: `backend.yml` (pytest + Alembic upgrade cycle) and `frontend.yml` (`npm ci` + lint + build)
+- Deploy configs: `render.yaml` (Render backend, `alembic upgrade head` on start, `/api/health` check) and `frontend/vercel.json` (Vite build, SPA rewrites)
+- Env examples: `DATABASE_URL` override + `CORS_ORIGINS` docs in root/`.env.example` and `backend/.env.example`; `frontend/.env.example` with `VITE_API_BASE_URL`
+- Postgres driver `psycopg2-binary` for `DATABASE_URL` deployments
+
+### Changed
+- Backend lifespan handler replaces deprecated `@app.on_event("startup")`
+- `GET /api/health` returns the uniform `{success, data, message}` envelope with a `SELECT 1` DB probe (`database: up`, 503 + `database: down` on failure)
+- Config: `DATABASE_URL` env override takes precedence; `CORS_ORIGINS` parsed as comma-separated string; non-SQLite URLs use pooled engine with `pool_pre_ping`
+- Frontend axios base URL reads `VITE_API_BASE_URL` (falls back to `/api/v1` for the Vite dev proxy)
+
+### Fixed
+- `test_auth.py`: accept valid unauthorized response codes for missing bearer token
+
 ## [0.2.0] - 2026-08-12
 
 ### Added
