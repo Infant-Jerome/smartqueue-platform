@@ -28,13 +28,27 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+    if (status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+      // Don't hard-redirect when the 401 came from login/register itself;
+      // the form needs to display the error instead of reloading.
+      const path = window.location.pathname;
+      if (path !== '/login' && path !== '/register') {
+        window.location.href = '/login';
+      }
     }
     if (error.response?.data?.message) {
       error.message = error.response.data.message;
+    } else if (status === 403) {
+      error.message = "You don't have permission to access this resource.";
+    } else if (status === 409) {
+      error.message = error.message || 'Request conflicts with the current state.';
+    } else if (status === 422) {
+      error.message = error.message || 'Validation failed. Please check your input.';
+    } else if (status >= 500) {
+      error.message = 'Server error. Please try again later.';
     }
     return Promise.reject(error);
   }

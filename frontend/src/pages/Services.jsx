@@ -1,21 +1,34 @@
 import { useState, useEffect } from 'react';
 import api from '../services/api';
+import { ServiceGrid } from '../components/ServiceCard';
+import { LoadingState, EmptyState, ErrorState } from '../components/States';
 
 export default function Services() {
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const fetchAll = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const res = await api.get('/services');
+      setServices(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      setError(err.message || 'Failed to load services.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    api.get('/services')
-      .then((res) => setServices(res.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    fetchAll();
   }, []);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <LoadingState message="Loading services..." />
       </div>
     );
   }
@@ -26,23 +39,14 @@ export default function Services() {
         <h1 className="text-2xl font-bold text-slate-800">Our Services</h1>
         <p className="text-slate-500">Choose from our range of professional grooming services</p>
       </div>
-      {services.length === 0 ? (
-        <div className="text-center py-12 text-slate-400">No services available yet</div>
-      ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {services.map((service) => (
-            <div key={service.id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 hover:shadow-md transition">
-              <h3 className="text-lg font-semibold text-slate-800">{service.name}</h3>
-              {service.description && (
-                <p className="text-slate-500 text-sm mt-2">{service.description}</p>
-              )}
-              <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
-                <span className="text-slate-500 text-sm">{service.duration} min</span>
-                <span className="text-blue-600 font-bold text-lg">₹{service.price}</span>
-              </div>
-            </div>
-          ))}
+      {error ? (
+        <ErrorState message={error} onRetry={fetchAll} />
+      ) : services.length === 0 ? (
+        <div className="bg-white rounded-xl border border-slate-200">
+          <EmptyState title="No services available" message="Please check back later." />
         </div>
+      ) : (
+        <ServiceGrid services={services} />
       )}
     </div>
   );

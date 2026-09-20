@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy import text
-from app.core.config import get_settings
+from app.core.config import get_settings, warn_if_default_secret_in_production
 from app.core.database import create_tables, engine
 from app.core.response import ok
 from app.api.v1.router import api_router
@@ -20,6 +20,9 @@ async def lifespan(app: FastAPI):
     # so never run create_all when DEBUG is False.
     if settings.DEBUG:
         create_tables()
+    # Production guard (warn-only, never logs the secret): activates when
+    # APP_ENV/ENVIRONMENT/ENV=production or DEBUG=False (see render.yaml).
+    warn_if_default_secret_in_production(settings)
     # N1-Core (Phase 5B) wiring only: subscribe notification fan-out to
     # queue events; never touches queue/appointment business logic.
     try:

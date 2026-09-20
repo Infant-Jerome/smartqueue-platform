@@ -10,7 +10,9 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_TYPE
-        value: sqlite
+        value: postgres
+      - key: APP_ENV
+        value: production
       - key: JWT_SECRET_KEY
         sync: false
       - key: JWT_ALGORITHM
@@ -18,7 +20,7 @@ services:
       - key: JWT_EXPIRE_MINUTES
         value: 60
       - key: CORS_ORIGINS
-        value: http://localhost:5173
+        sync: false
       - key: DEBUG
         value: False
       - key: PYTHON_VERSION

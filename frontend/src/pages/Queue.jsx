@@ -1,67 +1,100 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../services/api';
+import { QueueStatusCard } from '../components/QueueStatusCard';
+import { LoadingState, EmptyState, ErrorState } from '../components/States';
+import { useQueueSocket } from '../hooks/useQueueSocket';
 
 export default function Queue() {
   const [queueInfo, setQueueInfo] = useState(null);
+  const [appointment, setAppointment] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const fetchQueue = () => {
-    api.get('/queue/my-position')
-      .then((res) => setQueueInfo(res.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  };
+  const fetchAll = useCallback(async () => {
+    try {
+      const res = await api.get('/queue/my-position');
+      const info = res.data;
+      setQueueInfo(info);
+      if (info?.has_queue) {
+        try {
+          const aRes = await api.get('/appointments');
+          const list = Array.isArray(aRes.data) ? aRes.data : [];
+          const active = list.find((a) =>
+            ['booked', 'confirmed', 'waiting', 'serving', 'in_progress'].includes(
+              String(a.status || '').toLowerCase()
+            )
+          );
+          setAppointment(active || null);
+        } catch {
+          setAppointment(null);
+        }
+      } else {
+        setAppointment(null);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to load queue.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    fetchQueue();
-    const interval = setInterval(fetchQueue, 10000);
-    return () => clearInterval(interval);
-  }, []);
+    fetchAll();
+  }, [fetchAll]);
+
+  // Live updates: any queue event refetches the authoritative REST state.
+  const { connected } = useQueueSocket({
+    salonId: appointment?.salon_id,
+    barberId: appointment?.barber_id,
+    date: appointment?.appointment_date,
+    enabled: Boolean(queueInfo?.has_queue && appointment?.salon_id),
+    onEvent: () => fetchAll(),
+  });
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="max-w-3xl mx-auto px-4 py-8">
+        <LoadingState message="Loading queue..." />
+      </div>
+    );
+  }
+
+  if (error && !queueInfo) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-8">
+        <ErrorState message={error} onRetry={fetchAll} />
       </div>
     );
   }
 
   if (!queueInfo?.has_queue) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-16 text-center">
-        <div className="text-6xl mb-4">#</div>
-        <h1 className="text-2xl font-bold text-slate-800 mb-2">No Active Queue</h1>
-        <p className="text-slate-500">Book an appointment to join the queue</p>
+      <div className="max-w-3xl mx-auto px-4 py-8">
+        <div className="bg-white rounded-xl border border-slate-200">
+          <EmptyState
+            title="No Active Queue"
+            message="Book an appointment to join the queue."
+            action={<Link to="/book" className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition">Book Appointment</Link>}
+          />
+        </div>
       </div>
     );
   }
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold text-slate-800 mb-6">Live Queue</h1>
-
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl p-8 text-white mb-6">
-        <div className="text-center mb-6">
-          <p className="text-blue-200 text-sm mb-1">Your Queue Number</p>
-          <p className="text-6xl font-bold">#{queueInfo.queue_number}</p>
-        </div>
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <p className="text-blue-200 text-sm">People Ahead</p>
-            <p className="text-3xl font-bold">{queueInfo.people_ahead}</p>
-          </div>
-          <div>
-            <p className="text-blue-200 text-sm">Estimated Wait</p>
-            <p className="text-3xl font-bold">{queueInfo.estimated_wait_minutes} min</p>
-          </div>
-          <div>
-            <p className="text-blue-200 text-sm">Status</p>
-            <p className="text-3xl font-bold capitalize">{queueInfo.status}</p>
-          </div>
-        </div>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-slate-800">Live Queue</h1>
+        <span className={`flex items-center gap-2 text-xs font-medium ${connected ? 'text-green-600' : 'text-slate-400'}`}>
+          <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`}></span>
+          {connected ? 'Live' : 'Polling'}
+        </span>
       </div>
 
-      {queueInfo.currently_serving && (
+      <QueueStatusCard info={queueInfo} />
+
+      {queueInfo.currently_serving != null && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 mb-4">
           <div className="flex items-center justify-between">
             <div>
@@ -74,7 +107,9 @@ export default function Queue() {
       )}
 
       <div className="bg-white rounded-xl border border-slate-200 p-4">
-        <p className="text-sm text-slate-500 text-center">Queue updates automatically every 10 seconds</p>
+        <p className="text-sm text-slate-500 text-center">
+          {connected ? 'Queue updates live as the shop serves customers' : 'Queue refreshes automatically'}
+        </p>
       </div>
     </div>
   );

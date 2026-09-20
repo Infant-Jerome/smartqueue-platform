@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getDashboardPath, normalizeRole } from '../utils/roles';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -9,6 +10,11 @@ export default function Navbar() {
     logout();
     navigate('/login');
   };
+
+  const role = normalizeRole(user?.role);
+  const isAdmin = role === 'admin';
+  const isFrontDesk = role === 'staff' || role === 'receptionist';
+  const isBarber = role === 'barber';
 
   return (
     <nav className="bg-white shadow-sm border-b border-slate-200">
@@ -20,13 +26,27 @@ export default function Navbar() {
             </Link>
             {user && (
               <div className="hidden md:flex gap-6">
-                <Link to="/dashboard" className="text-slate-600 hover:text-blue-600 text-sm font-medium">Dashboard</Link>
+                <Link to={getDashboardPath(user.role)} className="text-slate-600 hover:text-blue-600 text-sm font-medium">Dashboard</Link>
                 <Link to="/services" className="text-slate-600 hover:text-blue-600 text-sm font-medium">Services</Link>
                 <Link to="/barbers" className="text-slate-600 hover:text-blue-600 text-sm font-medium">Barbers</Link>
-                <Link to="/book" className="text-slate-600 hover:text-blue-600 text-sm font-medium">Book</Link>
+                {(role === 'customer' || isFrontDesk || isAdmin) && (
+                  <Link to="/book" className="text-slate-600 hover:text-blue-600 text-sm font-medium">Book</Link>
+                )}
                 <Link to="/queue" className="text-slate-600 hover:text-blue-600 text-sm font-medium">Queue</Link>
-                {(user.role === 'admin' || user.role === 'staff') && (
-                  <Link to="/admin" className="text-slate-600 hover:text-blue-600 text-sm font-medium">Admin</Link>
+                {(role === 'customer' || isAdmin) && (
+                  <Link to="/appointments" className="text-slate-600 hover:text-blue-600 text-sm font-medium">Appointments</Link>
+                )}
+                {(role === 'customer' || isAdmin) && (
+                  <Link to="/notifications" className="text-slate-600 hover:text-blue-600 text-sm font-medium">Notifications</Link>
+                )}
+                {isFrontDesk && (
+                  <Link to="/receptionist/dashboard" className="text-slate-600 hover:text-blue-600 text-sm font-medium">Desk</Link>
+                )}
+                {isBarber && (
+                  <Link to="/barber/dashboard" className="text-slate-600 hover:text-blue-600 text-sm font-medium">My Queue</Link>
+                )}
+                {isAdmin && (
+                  <Link to="/admin/dashboard" className="text-slate-600 hover:text-blue-600 text-sm font-medium">Admin</Link>
                 )}
               </div>
             )}

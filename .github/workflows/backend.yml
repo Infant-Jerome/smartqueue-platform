@@ -26,6 +26,12 @@ jobs:
           pip install -r requirements.txt
       - name: Run pytest
         run: python -m pytest -q
+      - name: Lint (ruff)
+        run: |
+          pip install ruff
+          python -m ruff check .
+      - name: Dependency check
+        run: pip check
       - name: Alembic upgrade check (fresh SQLite)
         run: |
           rm -f /tmp/smartqueue_ci.db

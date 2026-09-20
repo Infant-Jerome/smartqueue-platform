@@ -202,12 +202,14 @@ The app is configured through environment variables (loaded from a `.env` file).
 | `DEBUG` | Enable debug mode (`true`/`false`) | N |
 | `CORS_ORIGINS` | Comma-separated allowed CORS origins (e.g. `https://app.vercel.app,http://localhost:5173`) | N |
 | `VITE_API_BASE_URL` | Frontend API base URL (frontend `.env`; `/api/v1` for dev, full Render URL for prod) | N |
+| `VITE_WS_BASE_URL` | Optional independent WebSocket base (`wss://.../api/v1`); derived from `VITE_API_BASE_URL`/page origin when unset | N |
+| `APP_ENV` | Set `production` on the host to activate production guards (JWT-secret check); empty locally | N |
 
 ## Deployment & CI
 
 - Backend (Render): `render.yaml` builds `backend/requirements.txt` and starts with `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT`. Set `DATABASE_URL`, `JWT_SECRET_KEY`, and `CORS_ORIGINS` (your Vercel URL) in the Render dashboard. Health check path: `/api/health`.
 - Frontend (Vercel): `frontend/vercel.json` builds with `npm run build` (output `dist`). Set `VITE_API_BASE_URL=https://<your-render-api>/api/v1` in the Vercel project settings.
-- CI: `.github/workflows/backend.yml` runs pytest + a fresh-SQLite `alembic upgrade/downgrade/upgrade` cycle; `.github/workflows/frontend.yml` runs `npm ci`, `npm run lint`, and `npm run build`.
+- CI: `.github/workflows/backend.yml` runs pytest, ruff, `pip check`, and a fresh-SQLite `alembic upgrade/downgrade/upgrade` cycle; `.github/workflows/frontend.yml` runs `npm ci`, `npm run lint`, and `npm run build`.
 
 ## API Documentation
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getDashboardPath } from '../utils/roles';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -13,12 +14,17 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    if (!email.trim() || !password) {
+      setError('Email and password are required.');
+      return;
+    }
     setLoading(true);
     try {
-      await login(email, password);
-      navigate('/dashboard');
+      // Backend returns a generic message; never reveal whether the email exists.
+      const userData = await login(email, password);
+      navigate(getDashboardPath(userData.role), { replace: true });
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Login failed');
+      setError(err.message || 'Login failed');
     } finally {
       setLoading(false);
     }
