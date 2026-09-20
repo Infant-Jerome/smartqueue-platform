@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../services/api';
+import Navbar from '../components/Navbar';
 import { LoadingState, EmptyState, ErrorState } from '../components/States';
 
 const CHANNEL_STYLES = {
@@ -34,9 +35,10 @@ export default function Notifications() {
     fetchAll();
   }, []);
 
-  if (loading) return <div className="max-w-4xl mx-auto px-4 py-8"><LoadingState message="Loading notifications..." /></div>;
+  if (loading) return <><Navbar /><div className="max-w-4xl mx-auto px-4 py-8"><LoadingState message="Loading notifications..." /></div></>;
 
   return (
+    <><Navbar />
     <div className="max-w-4xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold text-slate-800 mb-2">Notifications</h1>
       <p className="text-slate-500 mb-6">Updates about your appointments and queue</p>
@@ -69,5 +71,6 @@ export default function Notifications() {
         ))}
       </div>
     </div>
+    </>
   );
 }

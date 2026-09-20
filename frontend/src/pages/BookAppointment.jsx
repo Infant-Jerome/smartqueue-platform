@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import Navbar from '../components/Navbar';
 import { serviceId, serviceName, serviceDuration, barberId, barberStatus } from '../utils/format';
 import { LoadingState, ErrorState } from '../components/States';
 
@@ -74,22 +75,27 @@ export default function BookAppointment() {
 
   if (loading) {
     return (
+      <><Navbar />
       <div className="max-w-3xl mx-auto px-4 py-8">
         <LoadingState message="Loading booking options..." />
       </div>
+      </>
     );
   }
 
   if (loadError) {
     return (
+      <><Navbar />
       <div className="max-w-3xl mx-auto px-4 py-8">
         <ErrorState message={loadError} onRetry={() => window.location.reload()} />
       </div>
+      </>
     );
   }
 
   if (confirmation) {
     return (
+      <><Navbar />
       <div className="max-w-3xl mx-auto px-4 py-8">
         <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
           <div className="text-5xl mb-4">✓</div>
@@ -115,10 +121,12 @@ export default function BookAppointment() {
           </div>
         </div>
       </div>
+      </>
     );
   }
 
   return (
+    <><Navbar />
     <div className="max-w-3xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold text-slate-800 mb-2">Book Appointment</h1>
       <p className="text-slate-500 mb-6">Follow the steps to schedule your visit</p>
@@ -253,5 +261,6 @@ export default function BookAppointment() {
         </div>
       )}
     </div>
+    </>
   );
 }

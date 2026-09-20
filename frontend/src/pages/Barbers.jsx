@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../services/api';
+import Navbar from '../components/Navbar';
 import { BarberGrid } from '../components/BarberCard';
 import { LoadingState, EmptyState, ErrorState } from '../components/States';
 
@@ -27,13 +28,16 @@ export default function Barbers() {
 
   if (loading) {
     return (
+      <><Navbar />
       <div className="max-w-7xl mx-auto px-4 py-8">
         <LoadingState message="Loading barbers..." />
       </div>
+      </>
     );
   }
 
   return (
+    <><Navbar />
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-800">Our Barbers</h1>
@@ -49,5 +53,6 @@ export default function Barbers() {
         <BarberGrid barbers={barbers} />
       )}
     </div>
+    </>
   );
 }

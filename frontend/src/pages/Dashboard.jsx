@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
+import Navbar from '../components/Navbar';
 import { useAuth } from '../context/AuthContext';
 import { appointmentId } from '../utils/format';
 import { QueueStatusCard, ConfidenceBadge } from '../components/QueueStatusCard';
@@ -38,10 +39,12 @@ export default function Dashboard() {
     ['booked', 'confirmed', 'waiting'].includes(String(a.status || '').toLowerCase())
   );
 
-  if (loading) return <div className="max-w-7xl mx-auto px-4 py-8"><LoadingState message="Loading dashboard..." /></div>;
+  if (loading) return <><Navbar /><div className="max-w-7xl mx-auto px-4 py-8"><LoadingState message="Loading dashboard..." /></div></>;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <>
+      <Navbar />
+      <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="mb-8 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Welcome, {user?.name}</h1>
@@ -122,6 +125,7 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

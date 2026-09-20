@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
+import Navbar from '../components/Navbar';
 import { QueueStatusCard } from '../components/QueueStatusCard';
 import { LoadingState, EmptyState, ErrorState } from '../components/States';
 import { useQueueSocket } from '../hooks/useQueueSocket';
@@ -54,22 +55,27 @@ export default function Queue() {
 
   if (loading) {
     return (
+      <><Navbar />
       <div className="max-w-3xl mx-auto px-4 py-8">
         <LoadingState message="Loading queue..." />
       </div>
+      </>
     );
   }
 
   if (error && !queueInfo) {
     return (
+      <><Navbar />
       <div className="max-w-3xl mx-auto px-4 py-8">
         <ErrorState message={error} onRetry={fetchAll} />
       </div>
+      </>
     );
   }
 
   if (!queueInfo?.has_queue) {
     return (
+      <><Navbar />
       <div className="max-w-3xl mx-auto px-4 py-8">
         <div className="bg-white rounded-xl border border-slate-200">
           <EmptyState
@@ -79,10 +85,12 @@ export default function Queue() {
           />
         </div>
       </div>
+      </>
     );
   }
 
   return (
+    <><Navbar />
     <div className="max-w-3xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-slate-800">Live Queue</h1>
@@ -112,5 +120,6 @@ export default function Queue() {
         </p>
       </div>
     </div>
+    </>
   );
 }

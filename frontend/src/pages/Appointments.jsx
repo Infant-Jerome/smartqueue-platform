@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
+import Navbar from '../components/Navbar';
 import { appointmentId, fmtDate, fmtTime, prettyStatus } from '../utils/format';
 import { AppointmentCard } from '../components/AppointmentCard';
 import { LoadingState, EmptyState, ErrorState } from '../components/States';
@@ -45,9 +46,10 @@ export default function Appointments() {
     }
   };
 
-  if (loading) return <div className="max-w-4xl mx-auto px-4 py-8"><LoadingState message="Loading appointments..." /></div>;
+  if (loading) return <><Navbar /><div className="max-w-4xl mx-auto px-4 py-8"><LoadingState message="Loading appointments..." /></div></>;
 
   return (
+    <><Navbar />
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -101,5 +103,6 @@ export default function Appointments() {
         </div>
       )}
     </div>
+    </>
   );
 }

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getDashboardPath, normalizeRole } from '../utils/roles';
@@ -5,8 +6,10 @@ import { getDashboardPath, normalizeRole } from '../utils/roles';
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = () => {
+    setMenuOpen(false);
     logout();
     navigate('/login');
   };
@@ -54,8 +57,15 @@ export default function Navbar() {
           <div className="flex items-center gap-4">
             {user ? (
               <>
-                <span className="text-sm text-slate-500">Hi, {user.name}</span>
-                <button onClick={handleLogout} className="text-sm text-red-500 hover:text-red-700 font-medium">Logout</button>
+                <span className="hidden sm:inline text-sm text-slate-500">Hi, {user.name}</span>
+                <button onClick={handleLogout} className="hidden sm:inline text-sm text-red-500 hover:text-red-700 font-medium">Logout</button>
+                <button
+                  onClick={() => setMenuOpen((v) => !v)}
+                  aria-label="Menu"
+                  className="sm:hidden px-2 py-1 text-slate-600 text-xl leading-none"
+                >
+                  ☰
+                </button>
               </>
             ) : (
               <>
@@ -65,6 +75,33 @@ export default function Navbar() {
             )}
           </div>
         </div>
+        {user && menuOpen && (
+          <div className="sm:hidden pb-4 flex flex-col gap-1">
+            <Link to={getDashboardPath(user.role)} onClick={() => setMenuOpen(false)} className="px-2 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg">Dashboard</Link>
+            <Link to="/services" onClick={() => setMenuOpen(false)} className="px-2 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg">Services</Link>
+            <Link to="/barbers" onClick={() => setMenuOpen(false)} className="px-2 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg">Barbers</Link>
+            {(role === 'customer' || isFrontDesk || isAdmin) && (
+              <Link to="/book" onClick={() => setMenuOpen(false)} className="px-2 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg">Book</Link>
+            )}
+            <Link to="/queue" onClick={() => setMenuOpen(false)} className="px-2 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg">Queue</Link>
+            {(role === 'customer' || isAdmin) && (
+              <>
+                <Link to="/appointments" onClick={() => setMenuOpen(false)} className="px-2 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg">Appointments</Link>
+                <Link to="/notifications" onClick={() => setMenuOpen(false)} className="px-2 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg">Notifications</Link>
+              </>
+            )}
+            {isFrontDesk && (
+              <Link to="/receptionist/dashboard" onClick={() => setMenuOpen(false)} className="px-2 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg">Desk</Link>
+            )}
+            {isBarber && (
+              <Link to="/barber/dashboard" onClick={() => setMenuOpen(false)} className="px-2 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg">My Queue</Link>
+            )}
+            {isAdmin && (
+              <Link to="/admin/dashboard" onClick={() => setMenuOpen(false)} className="px-2 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg">Admin</Link>
+            )}
+            <button onClick={handleLogout} className="text-left px-2 py-2 text-sm font-medium text-red-500 hover:bg-red-50 rounded-lg">Logout</button>
+          </div>
+        )}
       </div>
     </nav>
   );

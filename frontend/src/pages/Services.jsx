@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../services/api';
+import Navbar from '../components/Navbar';
 import { ServiceGrid } from '../components/ServiceCard';
 import { LoadingState, EmptyState, ErrorState } from '../components/States';
 
@@ -27,13 +28,16 @@ export default function Services() {
 
   if (loading) {
     return (
+      <><Navbar />
       <div className="max-w-7xl mx-auto px-4 py-8">
         <LoadingState message="Loading services..." />
       </div>
+      </>
     );
   }
 
   return (
+    <><Navbar />
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-800">Our Services</h1>
@@ -49,5 +53,6 @@ export default function Services() {
         <ServiceGrid services={services} />
       )}
     </div>
+    </>
   );
 }
