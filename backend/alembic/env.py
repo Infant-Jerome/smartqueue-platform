@@ -56,6 +56,16 @@ def resolve_database_url() -> str | None:
 
 
 DATABASE_URL = resolve_database_url()
+# Normalize bare provider schemes (e.g. Render's ``postgres://``) to the
+# declared psycopg2 dialect; SQLAlchemy has no bare ``postgres`` dialect and
+# ``psycopg`` (v3) is not installed. Never log the URL (credentials).
+if DATABASE_URL and not DATABASE_URL.startswith("sqlite"):
+    try:
+        from app.core.config import _normalize_database_url
+
+        DATABASE_URL = _normalize_database_url(DATABASE_URL)
+    except Exception:
+        pass
 if DATABASE_URL:
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
 

@@ -2,10 +2,10 @@
 
 Env keys:
   DATABASE_URL      Full SQLAlchemy URL, takes precedence when set.
-                    Supports: postgresql+psycopg / postgresql+psycopg2 /
+                    Supports: postgresql+psycopg2 / postgresql+psycopg /
                     mysql+pymysql / sqlite. Bare ``postgres://`` and
                     ``postgresql://`` are normalized to
-                    ``postgresql+psycopg://``; bare ``mysql://`` to
+                    ``postgresql+psycopg2://``; bare ``mysql://`` to
                     ``mysql+pymysql://``.
   DATABASE_TYPE/HOST/PORT/USER/PASSWORD/NAME
                     Fallback field-based config (used when DATABASE_URL empty).
@@ -30,19 +30,23 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 def _normalize_database_url(url: str) -> str:
     """Normalize common URL shorthands to explicit SQLAlchemy driver URLs.
 
-    Explicit driver URLs (``postgresql+psycopg://``,
-    ``postgresql+psycopg2://``, ``mysql+pymysql://``, ``sqlite:///``) pass
-    through unchanged. Bare ``postgres://`` / ``postgresql://`` default to
-    ``postgresql+psycopg://``; bare ``mysql://`` to ``mysql+pymysql://``.
+    Explicit driver URLs (``postgresql+psycopg2://``,
+    ``postgresql+psycopg://``, ``mysql+pymysql://``, ``sqlite:///``) pass
+    through unchanged. Bare ``postgres://`` / ``postgresql://`` (exactly what
+    managed providers such as Render supply) default to
+    ``postgresql+psycopg2://`` because ``psycopg2-binary`` is the declared
+    production driver (see requirements.txt); bare ``mysql://`` to
+    ``mysql+pymysql://``.
     """
     u = url.strip()
     if u.startswith("postgres://"):
-        return "postgresql+psycopg://" + u[len("postgres://"):]
+        return "postgresql+psycopg2://" + u[len("postgres://"):]
     if u.startswith("postgresql://"):
-        # Bare scheme without driver -> default to psycopg (v3) driver.
-        # Explicit ``postgresql+psycopg2://`` / ``postgresql+psycopg://``
-        # never reach this branch (they start with ``postgresql+``).
-        return "postgresql+psycopg://" + u[len("postgresql://"):]
+        # Bare scheme without driver -> default to psycopg2, the declared
+        # production driver. Explicit ``postgresql+psycopg2://`` /
+        # ``postgresql+psycopg://`` never reach this branch (they start
+        # with ``postgresql+``).
+        return "postgresql+psycopg2://" + u[len("postgresql://"):]
     if u.startswith("mysql://"):
         return "mysql+pymysql://" + u[len("mysql://"):]
     return u
@@ -131,8 +135,10 @@ class Settings(BaseSettings):
             )
         if db_type in ("postgres", "postgresql", "psycopg", "psycopg2") or "+" in db_type:
             # ``+`` branch covers explicit driver strings such as
-            # ``postgresql+psycopg`` passed via DATABASE_TYPE.
-            driver = "postgresql+psycopg2" if "psycopg2" in db_type else "postgresql+psycopg"
+            # ``postgresql+psycopg`` passed via DATABASE_TYPE (passed
+            # through for explicit opt-in); bare names default to the
+            # declared psycopg2 production driver.
+            driver = "postgresql+psycopg" if db_type == "postgresql+psycopg" else "postgresql+psycopg2"
             return (
                 f"{driver}://{self.DATABASE_USER}:{self.DATABASE_PASSWORD}"
                 f"@{self.DATABASE_HOST}:{self.DATABASE_PORT}/{self.DATABASE_NAME}"
