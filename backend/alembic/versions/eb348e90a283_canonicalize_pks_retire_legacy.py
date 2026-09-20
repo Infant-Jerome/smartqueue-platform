@@ -34,6 +34,13 @@ Hand-reviewed corrective migration (SQLite-first, deterministic):
 - Downgrade recreates the exact f7ad2ddb6a36 schema (legacy columns,
   uq_barber_slot, legacy indexes) with deterministic FK names and copies
   data back best-effort.
+- PostgreSQL safety (deploy fix): SQLite runs with PRAGMA foreign_keys=OFF,
+  but PostgreSQL enforces FKs always and follows them across RENAME by OID,
+  so dropping a renamed legacy parent fails with DependentObjectsStillExist
+  unless the child's inherited FK is dropped first (explicit ALTER TABLE ..
+  DROP CONSTRAINT IF EXISTS, no CASCADE). end_time backfill uses INTERVAL
+  on PostgreSQL (no time() function there). Downgrade mirrors the same
+  ordering for its *_canonical drops.
 """
 from typing import Sequence, Union
 from alembic import op
@@ -56,6 +63,26 @@ def _pragma_on() -> None:
     bind = op.get_bind()
     if bind.dialect.name == "sqlite":
         op.execute("PRAGMA foreign_keys=ON")
+
+
+def _drop_fk(table: str, *names: str) -> None:
+    """Explicitly drop FK constraint(s) before their legacy parent is dropped.
+
+    SQLite runs this migration with ``PRAGMA foreign_keys=OFF``, so this is
+    a no-op there. PostgreSQL enforces FKs at all times AND follows
+    dependencies across ``RENAME`` by OID: after ``users`` becomes
+    ``users_legacy``, the child's inherited FK still references it, so
+    ``DROP TABLE users_legacy`` fails with DependentObjectsStillExist
+    unless the FK goes first. The canonical tables rebuilt afterwards
+    re-create the canonical FKs (``barbers.user_id -> users.user_id`` etc),
+    so nothing required is lost. ``IF EXISTS`` keeps this idempotent and
+    tolerant of naming variance; no ``CASCADE`` is used anywhere.
+    """
+    bind = op.get_bind()
+    if bind.dialect.name == "sqlite":
+        return
+    for name in names:
+        op.execute(sa.text(f'ALTER TABLE "{table}" DROP CONSTRAINT IF EXISTS "{name}"'))
 
 
 def upgrade() -> None:
@@ -90,6 +117,11 @@ def upgrade() -> None:
         'INSERT INTO users (user_id, name, email, password_hash, phone, role, created_at, updated_at) '
         'SELECT id, name, email, password_hash, phone, role, created_at, updated_at FROM users_legacy'
     )
+    # PG: barbers.user_id (f7 FK, follows the rename) and
+    # appointments_legacy.user_id (ebc auto FK) still reference users_legacy.
+    # Both tables are rebuilt with canonical FKs below; drop these first.
+    _drop_fk('barbers', 'fk_barbers_user_id_users', 'fk_barbers_user_id_users_legacy')
+    _drop_fk('appointments_legacy', 'appointments_user_id_fkey')
     op.drop_table('users_legacy')
 
     # --- 3b. barbers: id -> barber_id, status -> availability_status -------
@@ -125,6 +157,9 @@ def upgrade() -> None:
         'SELECT id, user_id, salon_id, experience_years, name, specialization, phone, status, created_at, updated_at '
         'FROM barbers_legacy'
     )
+    # PG: appointments_legacy.barber_id (ebc auto FK) still references
+    # barbers_legacy; it is dropped with appointments_legacy below.
+    _drop_fk('appointments_legacy', 'appointments_barber_id_fkey')
     op.drop_table('barbers_legacy')
 
     # --- 3c. services: id -> service_id, name -> service_name, etc --------
@@ -154,6 +189,9 @@ def upgrade() -> None:
         'created_at, updated_at) '
         'SELECT id, salon_id, name, description, duration, price, status, created_at, updated_at FROM services_legacy'
     )
+    # PG: appointments_legacy.service_id (ebc auto FK) still references
+    # services_legacy; it is dropped with appointments_legacy below.
+    _drop_fk('appointments_legacy', 'appointments_service_id_fkey')
     op.drop_table('services_legacy')
 
     # --- 4. appointments: full canonical rework ----------------------------
@@ -196,11 +234,19 @@ def upgrade() -> None:
     op.create_index('ix_appointments_salon_id', 'appointments', ['salon_id'], unique=False)
     op.create_index('ix_appointments_barber_id', 'appointments', ['barber_id'], unique=False)
     op.create_index('ix_appointments_service_id', 'appointments', ['service_id'], unique=False)
+    # end_time derivation is dialect-specific: SQLite has no INTERVAL
+    # arithmetic (uses time()+modifier), PostgreSQL has no time() function.
+    # On clean DBs this copy is a no-op; on data DBs both yield start+30min.
+    _end_expr = (
+        "time(appointment_time, '+30 minutes')"
+        if op.get_bind().dialect.name == "sqlite"
+        else "appointment_time + INTERVAL '30 minutes'"
+    )
     op.execute(
         "INSERT INTO appointments (appointment_id, customer_id, salon_id, barber_id, service_id, appointment_date, "
-        "start_time, end_time, status, booking_type, created_at, updated_at) "
+        f"start_time, end_time, status, booking_type, created_at, updated_at) "
         "SELECT id, user_id, NULL, barber_id, service_id, appointment_date, appointment_time, "
-        "time(appointment_time, '+30 minutes'), status, 'online', created_at, updated_at FROM appointments_legacy"
+        f"{_end_expr}, status, 'online', created_at, updated_at FROM appointments_legacy"
     )
 
     # --- 5. queue: full canonical rework -----------------------------------
@@ -322,6 +368,10 @@ def downgrade() -> None:
         'INSERT INTO users (id, name, email, password_hash, phone, role, created_at, updated_at) '
         'SELECT user_id, name, email, password_hash, phone, role, created_at, updated_at FROM users_canonical'
     )
+    # PG mirror of the upgrade fix: the renamed canonical children still
+    # reference users_canonical; both are rebuilt/dropped below.
+    _drop_fk('barbers_canonical', 'fk_barbers_user_id_users')
+    _drop_fk('appointments_canonical', 'fk_appointments_customer_id_users')
     op.drop_table('users_canonical')
 
     # --- 3b. barbers back to legacy (f7 state, deterministic FK names) -----
@@ -356,6 +406,7 @@ def downgrade() -> None:
         'SELECT barber_id, name, specialization, phone, availability_status, created_at, user_id, salon_id, '
         'experience_years, updated_at FROM barbers_canonical'
     )
+    _drop_fk('appointments_canonical', 'fk_appointments_barber_id_barbers')
     op.drop_table('barbers_canonical')
 
     # --- 3c. services back to legacy (f7 state) ----------------------------
@@ -383,6 +434,7 @@ def downgrade() -> None:
         'SELECT service_id, service_name, description, duration_minutes, price, status, created_at, salon_id, '
         'updated_at FROM services_canonical'
     )
+    _drop_fk('appointments_canonical', 'fk_appointments_service_id_services')
     op.drop_table('services_canonical')
 
     # --- 4. appointments back to legacy (ebc+f7 state) ---------------------
@@ -416,6 +468,7 @@ def downgrade() -> None:
         'SELECT appointment_id, customer_id, barber_id, service_id, appointment_date, start_time, status, NULL, '
         'created_at, updated_at FROM appointments_canonical'
     )
+    _drop_fk('queue_canonical', 'fk_queue_appointment_id_appointments')
     op.drop_table('appointments_canonical')
 
     # --- 5. queue back to legacy (ebc state) -------------------------------
