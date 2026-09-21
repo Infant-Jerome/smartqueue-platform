@@ -2,8 +2,9 @@
 
 ## 1. Phase Status
 Testing complete. Two code changes applied (security headers, login rate
-limiting), verified by new regression tests + full suite. Fixes are
-committed locally only — production picks them up on next Render deploy.
+limiting), verified by new regression tests + full suite. Commit `5ff00de`
+pushed to `origin/main`, Render redeployed, and both fixes
+production-verified 2026-09-21 06:33 UTC (see §28). Status: PASS.
 
 ## 2. Scope
 FastAPI + SQLAlchemy backend (no Prisma in this project), React frontend,
@@ -124,13 +125,40 @@ destructive actions taken.
 (env-only psycopg2 import proof), xfail_strict clean. Ruff clean.
 
 ## 26. Remaining Issues
-- Fixes live in working tree only; production still runs pre-fix code
-  until redeploy (headers/429 verify post-deploy).
+- Production deployment verified (see §28); deploy-pending item closed.
 - Rate limiter is per-process memory (multi-instance would need Redis).
+  This is the remaining architectural risk for future horizontal scaling
+  (non-blocking while single-instance on Render).
 - No browser-run XSS/DOM verification (no browser env); static review only.
 - Render free-tier cold starts can cause client timeouts (availability,
   not security).
 
 ## 27. Phase 11 Final Status
-**PASS WITH ISSUES** (issues = deploy-pending + limitations above; no
-open HIGH/CRITICAL).
+**PASS** (production-verified 2026-09-21; only non-blocking limitation is
+per-process rate-limit storage — see §28).
+
+## 28. Production Deployment Verification (2026-09-21 06:33 UTC)
+Commit `5ff00de` pushed to `origin/main`; Render redeployed
+(`https://smartqueue-platform.onrender.com`, `GET /api/health` 200,
+`database: up`).
+- Security headers (production `GET /api/health`, status 200):
+  `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: SAMEORIGIN`,
+  `Referrer-Policy: strict-origin-when-cross-origin` — all present.
+  Headers also present on 429 responses. Result: PASS.
+- Login rate limit (production `POST /api/v1/auth/login` with
+  deliberately invalid credentials, same source IP): attempts 1–20 →
+  HTTP 401 `{"success":false,"message":"Invalid email or password",
+  "data":null}` (normal behavior, failures counted); attempt 21 →
+  HTTP 429 `{"success":false,"message":"Too many attempts. Please try
+  again later.","data":null}` (expected error envelope, threshold
+  enforced). `GET /api/health` during the block still 200 (unrelated
+  endpoints unaffected). Successful logins are not counted as failures
+  (only 401 responses append to the bucket — code inspection + local
+  `test_successful_logins_never_trip_limiter` green). Result: PASS.
+- Regression tests: `backend/tests/test_security.py` 6/6 passed locally
+  post-deploy (headers, trip+envelope, success immunity, path scoping,
+  fail-open, auth shapes).
+- Final result: PASS. Remaining non-blocking risk: in-process
+  rate-limit storage — requires a shared store (e.g. Redis) if the
+  deployment ever scales horizontally.
