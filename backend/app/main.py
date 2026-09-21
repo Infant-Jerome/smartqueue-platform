@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy import text
 from app.core.config import get_settings, warn_if_default_secret_in_production
+from app.core.rate_limit import LoginRateLimitMiddleware, SecurityHeadersMiddleware
 from app.core.database import create_tables, engine
 from app.core.response import ok
 from app.api.v1.router import api_router
@@ -55,6 +56,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# NOTE: last added runs outermost, so security headers also cover 429s.
+app.add_middleware(LoginRateLimitMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(api_router, prefix="/api/v1")
 
