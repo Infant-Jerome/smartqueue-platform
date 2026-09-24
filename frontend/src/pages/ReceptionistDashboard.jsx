@@ -1,11 +1,20 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Play, Check, Users, CalendarDays, Activity, Clock } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { LoadingState, EmptyState, ErrorState } from '../components/States';
 import { ConfidenceBadge } from '../components/QueueStatusCard';
-import { statusStyle, prettyStatus, fmtTime } from '../utils/format';
+import { fmtTime } from '../utils/format';
 import { useQueueSocket } from '../hooks/useQueueSocket';
+import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import StatusBadge from '../components/ui/StatusBadge';
+import StatCard from '../components/ui/StatCard';
+import PageHeader from '../components/ui/PageHeader';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
+import Field from '../components/ui/Field';
+import Select from '../components/ui/Select';
 
 function todayStr() {
   const d = new Date();
@@ -19,26 +28,10 @@ function displayDate() {
 const FILTERS = ['All', 'Waiting', 'Serving', 'Completed', 'Cancelled', 'No Show'];
 const FILTER_STATUS = { Waiting: 'waiting', Serving: 'serving', Completed: 'completed', Cancelled: 'cancelled', 'No Show': 'no_show' };
 
-function ActionButton({ onClick, busy, children, tone = 'primary', title }) {
-  const tones = {
-    primary: 'bg-blue-600 hover:bg-blue-700 text-white',
-    success: 'bg-green-600 hover:bg-green-700 text-white',
-    danger: 'bg-red-50 hover:bg-red-100 text-red-600 border border-red-200',
-    subtle: 'bg-slate-100 hover:bg-slate-200 text-slate-700',
-  };
-  return (
-    <button onClick={onClick} disabled={busy} title={title}
-      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition disabled:opacity-50 ${tones[tone]}`}>
-      {busy ? '...' : children}
-    </button>
-  );
-}
-
 /**
- * Receptionist / staff operational dashboard (Frontend Phase 4).
- * Salon-scoped overview using only staff-authorized endpoints.
- * Backend owns queue state, SAWTE estimates and RBAC; this page displays
- * backend values verbatim and calls existing operational endpoints.
+ * Receptionist / staff operational dashboard (Phase 9 Step 7 redesign —
+ * presentation only). Salon-scoped overview using only staff-authorized
+ * endpoints. Backend owns queue state, SAWTE estimates and RBAC.
  */
 export default function ReceptionistDashboard() {
   const { user } = useAuth();
@@ -56,6 +49,8 @@ export default function ReceptionistDashboard() {
   const [pending, setPending] = useState({});
   const [statusFilter, setStatusFilter] = useState('All');
   const [barberFilter, setBarberFilter] = useState('All');
+  const [skipTarget, setSkipTarget] = useState(null);
+  const [cancelTarget, setCancelTarget] = useState(null);
 
   const serviceOf = useCallback((id) => services[id], [services]);
   const barberOf = useCallback((id) => barbers.find((b) => b.barber_id === id), [barbers]);
@@ -162,6 +157,11 @@ export default function ReceptionistDashboard() {
   const availForBarber = (barberId) =>
     availability.filter((v) => v.barber_id === barberId && String(v.date).slice(0, 10) === today);
 
+  const sortedQueue = useMemo(
+    () => [...queue].sort((a, b) => a.queue_position - b.queue_position),
+    [queue]
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50">
@@ -175,250 +175,270 @@ export default function ReceptionistDashboard() {
     <div className="min-h-screen bg-slate-50">
       <Navbar />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800">Receptionist Dashboard</h1>
-            <p className="text-slate-500 mt-1">{displayDate()}{user?.name ? ` · ${user.name}` : ''}</p>
-          </div>
-          <span className={`flex items-center gap-2 text-xs font-medium ${connected ? 'text-green-600' : 'text-slate-400'}`}>
-            <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`}></span>
-            {connected ? 'Live' : 'Live updates temporarily unavailable'}
-          </span>
-        </div>
+        <PageHeader
+          title="Reception Desk"
+          description={`${displayDate()}${user?.name ? ` · ${user.name}` : ''} · Manage today's queue and appointments.`}
+          actions={
+            <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${connected ? 'text-[var(--sq-success)]' : 'text-[var(--sq-text-subtle)]'}`}>
+              <span className="relative flex h-2 w-2" aria-hidden="true">
+                {connected && (
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--sq-success)] opacity-60" />
+                )}
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${connected ? 'bg-[var(--sq-success)]' : 'bg-[var(--sq-border)]'}`} />
+              </span>
+              {connected ? 'Live' : 'Live updates temporarily unavailable'}
+            </span>
+          }
+        />
 
         {error && (
           <div className="mb-4"><ErrorState message={error} onRetry={fetchAll} /></div>
         )}
         {actionError && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{actionError}</div>
+          <div className="mb-4 p-3 bg-[var(--sq-danger-soft)] border border-[#fca5a5] rounded-[var(--sq-radius-lg)] text-[var(--sq-danger)] text-sm" role="alert">{actionError}</div>
         )}
         {notice && (
-          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">{notice}</div>
+          <div className="mb-4 p-3 bg-[var(--sq-success-soft)] border border-[#bbf7d0] rounded-[var(--sq-radius-lg)] text-[var(--sq-success)] text-sm">{notice}</div>
         )}
 
-        {/* Summary */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          {[
-            { label: "Today's Appointments", value: todaysAppointments.length },
-            { label: 'Waiting', value: waitingCount },
-            { label: 'Serving', value: servingCount },
-            { label: 'Completed', value: completedCount },
-            { label: 'Cancelled / No-show', value: cancelledCount + noShowCount },
-          ].map((c) => (
-            <div key={c.label} className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-              <p className="text-slate-500 text-sm">{c.label}</p>
-              <p className="text-3xl font-bold text-slate-800 mt-1">{c.value}</p>
-            </div>
-          ))}
+        {/* Compact operational summary */}
+        <div className="grid grid-cols-3 md:grid-cols-5 gap-3 mb-4">
+          <StatCard title="Today" value={todaysAppointments.length} icon={<CalendarDays size={18} aria-hidden="true" />} />
+          <StatCard title="Waiting" value={waitingCount} icon={<Users size={18} aria-hidden="true" />} />
+          <StatCard title="Serving" value={servingCount} icon={<Activity size={18} aria-hidden="true" />} />
+          <StatCard title="Done" value={completedCount} icon={<Check size={18} aria-hidden="true" />} />
+          <StatCard title="Cancel/No-show" value={cancelledCount + noShowCount} icon={<Clock size={18} aria-hidden="true" />} />
         </div>
 
-        {/* Currently serving */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Currently Serving</h2>
-          {servingEntries.length === 0 ? (
-            <EmptyState title="No customers are currently being served." />
-          ) : (
-            <div className="grid md:grid-cols-2 gap-3">
+        {/* P0 — Live queue control panel */}
+        <Card className="mb-4">
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <h2 className="sq-h2 mr-auto">Live Queue</h2>
+            <Field>
+              <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter by status" className="!w-auto !min-h-0 py-1.5">
+                {FILTERS.map((f) => <option key={f} value={f}>{f}</option>)}
+              </Select>
+            </Field>
+            <Field>
+              <Select value={barberFilter} onChange={(e) => setBarberFilter(e.target.value)} aria-label="Filter by barber" className="!w-auto !min-h-0 py-1.5">
+                <option value="All">All barbers</option>
+                {barbers.map((b) => <option key={b.barber_id} value={b.barber_id}>{b.name}</option>)}
+              </Select>
+            </Field>
+          </div>
+
+          {servingEntries.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3" aria-label="Currently serving">
               {servingEntries.map((q) => {
-                const appt = apptById[q.appointment_id] || {};
-                const svc = appt.service_id != null ? serviceOf(appt.service_id) : undefined;
                 const barb = barberOf(q.barber_id);
                 return (
-                  <div key={q.queue_id} className="p-4 bg-green-50 border border-green-200 rounded-xl">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="font-semibold text-slate-800">Queue #{q.queue_position} · {barb?.name || `Barber #${q.barber_id}`}</p>
-                      <ActionButton onClick={() => completeEntry(q.queue_id)} busy={pending[`complete-${q.queue_id}`]} tone="success">
-                        Complete
-                      </ActionButton>
-                    </div>
-                    <p className="text-sm text-slate-600 mt-1">
-                      Appt #{q.appointment_id} · {svc?.service_name || 'Service'}
-                      {appt.start_time ? ` · ${fmtTime(appt.start_time)}` : ''}
-                    </p>
-                  </div>
+                  <span key={q.queue_id} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--sq-success-soft)] text-[var(--sq-success)] text-sm font-semibold">
+                    <span className="relative flex h-2 w-2" aria-hidden="true">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--sq-success)] opacity-60" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--sq-success)]" />
+                    </span>
+                    <span className="sq-tnum">#{q.queue_position}</span> {barb?.name || `Barber #${q.barber_id}`}
+                    <button
+                      onClick={() => completeEntry(q.queue_id)}
+                      disabled={pending[`complete-${q.queue_id}`]}
+                      className="underline underline-offset-2 hover:no-underline disabled:opacity-50 font-medium"
+                    >
+                      {pending[`complete-${q.queue_id}`] ? '…' : 'Complete'}
+                    </button>
+                  </span>
                 );
               })}
             </div>
           )}
-        </div>
 
-        {/* Live queue + filters */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <h2 className="text-lg font-semibold text-slate-800 mr-auto">Live Queue</h2>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm outline-none">
-              {FILTERS.map((f) => <option key={f} value={f}>{f}</option>)}
-            </select>
-            <select value={barberFilter} onChange={(e) => setBarberFilter(e.target.value)}
-              className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm outline-none">
-              <option value="All">All barbers</option>
-              {barbers.map((b) => <option key={b.barber_id} value={b.barber_id}>{b.name}</option>)}
-            </select>
-          </div>
-          {queue.length === 0 ? (
-            <EmptyState title="No customers are currently waiting." />
+          {sortedQueue.length === 0 ? (
+            <EmptyState title="Queue is clear." message="New appointments will appear here." />
           ) : (
             <div className="space-y-2">
-              {[...queue].sort((a, b) => a.queue_position - b.queue_position).map((q) => {
+              {sortedQueue.map((q) => {
                 const st = String(q.status).toLowerCase();
                 const appt = apptById[q.appointment_id] || {};
                 const svc = appt.service_id != null ? serviceOf(appt.service_id) : undefined;
                 const barb = barberOf(q.barber_id);
+                const serving = st === 'serving' || st === 'in_progress';
+                const waiting = st === 'waiting';
                 return (
-                  <div key={q.queue_id} className="flex flex-wrap items-center gap-3 p-3 bg-slate-50 rounded-xl">
-                    <div className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold shrink-0">
-                      {q.queue_position}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-slate-800 text-sm">
-                        Appt #{q.appointment_id} · {barb?.name || `Barber #${q.barber_id}`} · {svc?.service_name || 'Service'}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {appt.start_time ? `${fmtTime(appt.start_time)} · ` : ''}
-                        {svc?.duration_minutes != null ? `${svc.duration_minutes} min · ` : ''}
-                        {q.estimated_wait_minutes != null ? `~${q.estimated_wait_minutes} min wait` : 'Calculating...'}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusStyle(q.status)}`}>
-                          {prettyStatus(q.status)}
-                        </span>
-                        {q.confidence && <ConfidenceBadge level={q.confidence} />}
-                      </div>
-                    </div>
-                    <div className="flex gap-1.5">
-                      {st === 'waiting' && (
-                        <ActionButton onClick={() => serveEntry(q.queue_id)} busy={pending[`serve-${q.queue_id}`]}>
-                          Serve
-                        </ActionButton>
-                      )}
-                      {(st === 'serving' || st === 'in_progress') && (
-                        <ActionButton onClick={() => completeEntry(q.queue_id)} busy={pending[`complete-${q.queue_id}`]} tone="success">
-                          Complete
-                        </ActionButton>
-                      )}
-                      {st === 'waiting' && (
-                        <ActionButton onClick={() => skipEntry(q.queue_id)} busy={pending[`skip-${q.queue_id}`]} tone="danger">
-                          Skip
-                        </ActionButton>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Barber overview */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Barbers</h2>
-          {barbers.length === 0 ? (
-            <EmptyState title="No barber data available." />
-          ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {barbers.map((b) => {
-                const rows = queueForBarber(b.barber_id);
-                const w = rows.filter((q) => String(q.status).toLowerCase() === 'waiting').length;
-                const s = rows.filter((q) => ['serving', 'in_progress'].includes(String(q.status).toLowerCase())).length;
-                const wins = availForBarber(b.barber_id);
-                return (
-                  <div key={b.barber_id} className="border border-slate-200 rounded-xl p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
-                        <span className="text-blue-600 font-bold">{(b.name || '?').charAt(0)}</span>
-                      </div>
+                  <div
+                    key={q.queue_id}
+                    className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 rounded-[var(--sq-radius-lg)] border-l-4 ${
+                      serving
+                        ? 'bg-[var(--sq-success-soft)]/40 border border-[var(--sq-border)] border-l-[var(--sq-success)]'
+                        : 'bg-[var(--sq-surface-muted)] border border-transparent border-l-[var(--sq-border)]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <span className="flex w-9 h-9 rounded-full bg-[var(--sq-primary)] text-white items-center justify-center font-bold sq-tnum shrink-0" aria-hidden="true">
+                        {q.queue_position}
+                      </span>
                       <div className="min-w-0">
-                        <p className="font-semibold text-slate-800 truncate">{b.name}</p>
-                        <p className="text-xs text-slate-500 truncate">
-                          {b.specialization || 'General'} · Availability: <span className="capitalize">{b.availability_status}</span>
+                        <p className="font-semibold text-sm truncate">
+                          Appt #{q.appointment_id} · {barb?.name || `Barber #${q.barber_id}`} · {svc?.service_name || 'Service'}
+                        </p>
+                        <p className="text-xs text-[var(--sq-text-muted)] sq-tnum">
+                          {appt.start_time ? `${fmtTime(appt.start_time)} · ` : ''}
+                          {q.estimated_wait_minutes != null ? `~${q.estimated_wait_minutes} min` : 'Calculating…'}
                         </p>
                       </div>
                     </div>
-                    <p className="text-sm text-slate-600 mt-3">
-                      Waiting: <strong>{w}</strong> · Serving: <strong>{s}</strong>
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Today: {wins.length ? wins.map((x) => `${fmtTime(x.start_time)}–${fmtTime(x.end_time)}`).join(', ') : 'no windows listed'}
-                    </p>
-                    <button
-                      onClick={() => serveNextFor(b.barber_id)}
-                      disabled={pending[`next-${b.barber_id}`]}
-                      className="mt-3 w-full bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition"
-                    >
-                      {pending[`next-${b.barber_id}`] ? 'Serving...' : 'Serve Next Customer'}
-                    </button>
+                    <div className="flex items-center gap-2 ml-12 sm:ml-0">
+                      <StatusBadge status={q.status} />
+                      {q.confidence && <ConfidenceBadge level={q.confidence} />}
+                    </div>
+                    <div className="flex gap-1.5 ml-12 sm:ml-0">
+                      {waiting && (
+                        <Button size="sm" onClick={() => serveEntry(q.queue_id)} loading={pending[`serve-${q.queue_id}`]} icon={<Play size={13} aria-hidden="true" />}>
+                          Serve
+                        </Button>
+                      )}
+                      {serving && (
+                        <Button size="sm" tone="success" onClick={() => completeEntry(q.queue_id)} loading={pending[`complete-${q.queue_id}`]} icon={<Check size={13} aria-hidden="true" />}>
+                          Done
+                        </Button>
+                      )}
+                      {waiting && (
+                        <Button size="sm" tone="danger" onClick={() => setSkipTarget(q)} loading={pending[`skip-${q.queue_id}`]}>
+                          Skip
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
             </div>
           )}
-        </div>
+        </Card>
 
-        {/* Today's appointments */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Today&apos;s Appointments</h2>
-          {todaysAppointments.length === 0 ? (
-            <EmptyState title="No appointments scheduled for today." />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-slate-500 border-b border-slate-100">
-                    <th className="py-2 pr-4 font-medium">Time</th>
-                    <th className="py-2 pr-4 font-medium">Appt</th>
-                    <th className="py-2 pr-4 font-medium">Barber</th>
-                    <th className="py-2 pr-4 font-medium">Service</th>
-                    <th className="py-2 pr-4 font-medium">Duration</th>
-                    <th className="py-2 pr-4 font-medium">Status</th>
-                    <th className="py-2 font-medium">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {todaysAppointments.map((a) => {
-                    const svc = a.service_id != null ? serviceOf(a.service_id) : undefined;
-                    const barb = barberOf(a.barber_id);
-                    const st = String(a.status || '').toLowerCase();
-                    const q = queue.find((x) => x.appointment_id === a.appointment_id);
-                    const terminal = ['completed', 'cancelled', 'no_show'].includes(st);
-                    return (
-                      <tr key={a.appointment_id} className="border-b border-slate-50">
-                        <td className="py-2 pr-4 font-medium text-slate-800 whitespace-nowrap">
-                          {fmtTime(a.start_time)}{a.end_time ? ` – ${fmtTime(a.end_time)}` : ''}
-                        </td>
-                        <td className="py-2 pr-4 text-slate-600">#{a.appointment_id}</td>
-                        <td className="py-2 pr-4 text-slate-600">{barb?.name || `#${a.barber_id}`}</td>
-                        <td className="py-2 pr-4 text-slate-600">{svc?.service_name || '—'}</td>
-                        <td className="py-2 pr-4 text-slate-600">{svc?.duration_minutes != null ? `${svc.duration_minutes} min` : '—'}</td>
-                        <td className="py-2 pr-4">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusStyle(a.status)}`}>
-                            {prettyStatus(a.status)}
-                          </span>
-                          {q && <span className="text-xs text-slate-400 ml-1">Q#{q.queue_position}</span>}
-                        </td>
-                        <td className="py-2">
-                          {!terminal && (
-                            <div className="flex gap-1.5">
-                              {st === 'booked' && (
-                                <ActionButton onClick={() => runAction(`confirm-${a.appointment_id}`, () => api.put(`/appointments/${a.appointment_id}`, { status: 'confirmed' }), 'Appointment confirmed.')} busy={pending[`confirm-${a.appointment_id}`]} tone="subtle">
-                                  Confirm
-                                </ActionButton>
-                              )}
-                              <ActionButton onClick={() => runAction(`cancel-${a.appointment_id}`, () => api.delete(`/appointments/${a.appointment_id}`), 'Appointment cancelled.')} busy={pending[`cancel-${a.appointment_id}`]} tone="danger">
-                                Cancel
-                              </ActionButton>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+        <div className="grid lg:grid-cols-5 gap-4 items-start">
+          {/* P1 — appointments */}
+          <Card className="lg:col-span-3">
+            <h2 className="sq-h2 mb-3">Today&apos;s Appointments</h2>
+            {todaysAppointments.length === 0 ? (
+              <EmptyState title="No appointments scheduled for today." />
+            ) : (
+              <div className="space-y-2">
+                {todaysAppointments.map((a) => {
+                  const svc = a.service_id != null ? serviceOf(a.service_id) : undefined;
+                  const barb = barberOf(a.barber_id);
+                  const st = String(a.status || '').toLowerCase();
+                  const terminal = ['completed', 'cancelled', 'no_show'].includes(st);
+                  const q = queue.find((x) => x.appointment_id === a.appointment_id);
+                  return (
+                    <div key={a.appointment_id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 bg-[var(--sq-surface-muted)] rounded-[var(--sq-radius-lg)]">
+                      <span className="font-semibold sq-tnum text-sm whitespace-nowrap">
+                        {fmtTime(a.start_time)}{a.end_time ? `–${fmtTime(a.end_time)}` : ''}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">
+                          #{a.appointment_id} · {barb?.name || `#${a.barber_id}`} · {svc?.service_name || '—'}
+                        </p>
+                        <p className="text-xs text-[var(--sq-text-muted)]">
+                          {svc?.duration_minutes != null ? `${svc.duration_minutes} min` : ''}
+                          {q ? ` · Q#${q.queue_position}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <StatusBadge status={a.status} />
+                        {!terminal && (
+                          <>
+                            {st === 'booked' && (
+                              <Button size="sm" tone="secondary" loading={pending[`confirm-${a.appointment_id}`]}
+                                onClick={() => runAction(`confirm-${a.appointment_id}`, () => api.put(`/appointments/${a.appointment_id}`, { status: 'confirmed' }), 'Appointment confirmed.')}>
+                                Confirm
+                              </Button>
+                            )}
+                            <Button size="sm" tone="danger" loading={pending[`cancel-${a.appointment_id}`]}
+                              onClick={() => setCancelTarget(a)}>
+                              Cancel
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+
+          {/* P2 — barber overview */}
+          <Card className="lg:col-span-2">
+            <h2 className="sq-h2 mb-3">Barbers</h2>
+            {barbers.length === 0 ? (
+              <EmptyState title="No barber data available." />
+            ) : (
+              <div className="space-y-3">
+                {barbers.map((b) => {
+                  const rows = queueForBarber(b.barber_id);
+                  const w = rows.filter((q) => String(q.status).toLowerCase() === 'waiting').length;
+                  const s = rows.filter((q) => ['serving', 'in_progress'].includes(String(q.status).toLowerCase())).length;
+                  const wins = availForBarber(b.barber_id);
+                  return (
+                    <div key={b.barber_id} className="border border-[var(--sq-border)] rounded-[var(--sq-radius-lg)] p-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex w-9 h-9 rounded-full bg-[var(--sq-primary-soft)] text-[var(--sq-primary)] items-center justify-center font-bold shrink-0" aria-hidden="true">
+                          {(b.name || '?').charAt(0)}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-sm truncate">{b.name}</p>
+                          <p className="text-xs text-[var(--sq-text-muted)] truncate">
+                            {b.specialization || 'General'} · <span className="capitalize">{b.availability_status}</span>
+                          </p>
+                        </div>
+                        <span className="sq-caption sq-tnum text-[var(--sq-text-muted)] shrink-0" aria-label={`${w} waiting, ${s} serving`}>
+                          {w}W · {s}S
+                        </span>
+                      </div>
+                      <p className="text-xs text-[var(--sq-text-subtle)] mt-1.5">
+                        {wins.length ? wins.map((x) => `${fmtTime(x.start_time)}–${fmtTime(x.end_time)}`).join(', ') : 'no windows listed'}
+                      </p>
+                      <Button size="sm" fullWidth className="mt-2" loading={pending[`next-${b.barber_id}`]}
+                        onClick={() => serveNextFor(b.barber_id)}>
+                        Serve Next
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
         </div>
       </main>
+
+      <ConfirmDialog
+        open={Boolean(skipTarget)}
+        title="Mark as no-show?"
+        description={skipTarget ? `Queue #${skipTarget.queue_position} (Appt #${skipTarget.appointment_id}) will leave the waiting list.` : ''}
+        confirmLabel="Mark no-show"
+        danger
+        loading={skipTarget ? pending[`skip-${skipTarget.queue_id}`] : false}
+        onCancel={() => setSkipTarget(null)}
+        onConfirm={() => {
+          if (skipTarget) {
+            skipEntry(skipTarget.queue_id);
+            setSkipTarget(null);
+          }
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(cancelTarget)}
+        title="Cancel this appointment?"
+        description={cancelTarget ? `Appointment #${cancelTarget.appointment_id} will be cancelled for the customer.` : ''}
+        confirmLabel="Cancel appointment"
+        danger
+        loading={cancelTarget ? pending[`cancel-${cancelTarget.appointment_id}`] : false}
+        onCancel={() => setCancelTarget(null)}
+        onConfirm={() => {
+          if (cancelTarget) {
+            runAction(`cancel-${cancelTarget.appointment_id}`, () => api.delete(`/appointments/${cancelTarget.appointment_id}`), 'Appointment cancelled.');
+            setCancelTarget(null);
+          }
+        }}
+      />
     </div>
   );
 }

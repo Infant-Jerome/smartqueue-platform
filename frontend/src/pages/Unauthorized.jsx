@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { ShieldAlert } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getDashboardPath } from '../utils/roles';
 
@@ -9,7 +10,11 @@ export default function Unauthorized() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
       <div className="w-full max-w-md text-center bg-white rounded-2xl shadow-lg p-8">
-        <div className="text-5xl mb-4">🚫</div>
+        <div className="flex justify-center mb-4" aria-hidden="true">
+          <span className="flex w-14 h-14 rounded-full bg-[var(--sq-danger-soft)] text-[var(--sq-danger)] items-center justify-center">
+            <ShieldAlert size={28} />
+          </span>
+        </div>
         <h1 className="text-2xl font-bold text-slate-800 mb-2">Unauthorized</h1>
         <p className="text-slate-500 mb-6">You don&apos;t have permission to access this page.</p>
         <Link

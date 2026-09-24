@@ -1,5 +1,71 @@
 @import "tailwindcss";
 
+:root {
+  /* SmartQueue premium design tokens — single source of truth.
+     Primary: deep blue/indigo. Accent: warm brass/amber.
+     Status colors keep standard semantics (never use accent for status). */
+
+  /* Primary — deep blue */
+  --sq-primary: #1e3a8a;
+  --sq-primary-hover: #1e40af;
+  --sq-primary-active: #172e6e;
+  --sq-primary-soft: #e8edfa;
+
+  /* Accent — warm brass */
+  --sq-accent: #b45309;
+  --sq-accent-hover: #92400e;
+  --sq-accent-soft: #faf0e1;
+
+  /* Status */
+  --sq-success: #15803d;
+  --sq-success-soft: #dcfce7;
+  --sq-warning: #b45309;
+  --sq-warning-soft: #fef3c7;
+  --sq-danger: #dc2626;
+  --sq-danger-soft: #fee2e2;
+  --sq-info: #1d4ed8;
+  --sq-info-soft: #dbeafe;
+
+  /* Neutrals */
+  --sq-background: #f6f7f9;
+  --sq-surface: #ffffff;
+  --sq-surface-muted: #f1f4f8;
+  --sq-text: #16213a;
+  --sq-text-muted: #55607a;
+  --sq-text-subtle: #8b94a9;
+  --sq-border: #e3e8f0;
+
+  /* Typography */
+  --sq-font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+  /* Spacing */
+  --sq-space-1: 0.25rem;
+  --sq-space-2: 0.5rem;
+  --sq-space-3: 0.75rem;
+  --sq-space-4: 1rem;
+  --sq-space-5: 1.25rem;
+  --sq-space-6: 1.5rem;
+  --sq-space-8: 2rem;
+  --sq-space-10: 2.5rem;
+  --sq-space-12: 3rem;
+
+  /* Radius */
+  --sq-radius-sm: 0.5rem;
+  --sq-radius-md: 0.75rem;
+  --sq-radius-lg: 1rem;
+  --sq-radius-xl: 1.25rem;
+  --sq-radius-2xl: 1.5rem;
+
+  /* Shadows */
+  --sq-shadow-sm: 0 1px 2px rgb(22 33 58 / 0.05);
+  --sq-shadow-md: 0 4px 14px -4px rgb(22 33 58 / 0.12);
+  --sq-shadow-lg: 0 12px 32px -12px rgb(22 33 58 / 0.22);
+
+  /* Transitions */
+  --sq-transition-fast: 120ms ease;
+  --sq-transition-normal: 200ms ease;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -7,7 +73,76 @@
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: #f8fafc;
-  color: #1e293b;
+  font-family: var(--sq-font-sans);
+  background-color: var(--sq-background);
+  color: var(--sq-text);
+}
+
+/* Typographic hierarchy */
+.sq-display {
+  font-size: 3rem;
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.sq-h1 {
+  font-size: 1.5rem;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.sq-h2 {
+  font-size: 1.125rem;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.sq-h3 {
+  font-size: 1rem;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.sq-body {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.sq-body-sm {
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.sq-caption {
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.sq-label {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+/* Tabular numerals for operational figures */
+.sq-tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Visible keyboard focus */
+.sq-focusable:focus-visible {
+  outline: 2px solid var(--sq-primary);
+  outline-offset: 2px;
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

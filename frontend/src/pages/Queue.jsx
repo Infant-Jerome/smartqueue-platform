@@ -100,19 +100,7 @@ export default function Queue() {
         </span>
       </div>
 
-      <QueueStatusCard info={queueInfo} />
-
-      {queueInfo.currently_serving != null && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-500">Currently Serving</p>
-              <p className="text-2xl font-bold text-slate-800">#{queueInfo.currently_serving}</p>
-            </div>
-            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-          </div>
-        </div>
-      )}
+      <QueueStatusCard info={queueInfo} appointment={appointment} live={connected} />
 
       <div className="bg-white rounded-xl border border-slate-200 p-4">
         <p className="text-sm text-slate-500 text-center">

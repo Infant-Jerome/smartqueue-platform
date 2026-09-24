@@ -1,44 +1,47 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  Play, Check, Clock, CalendarDays, Users, Activity,
+  User, Scissors, Plus,
+} from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { LoadingState, EmptyState, ErrorState } from '../components/States';
 import { ConfidenceBadge } from '../components/QueueStatusCard';
-import { statusStyle, prettyStatus, fmtTime, fmtDate } from '../utils/format';
+import { fmtTime, fmtDate } from '../utils/format';
 import { useQueueSocket } from '../hooks/useQueueSocket';
+import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import StatusBadge from '../components/ui/StatusBadge';
+import StatCard from '../components/ui/StatCard';
+import PageHeader from '../components/ui/PageHeader';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
+import Field from '../components/ui/Field';
+import Input from '../components/ui/Input';
 
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function displayDate() {
-  return new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function firstName(user) {
+  const name = String(user?.name || '').trim();
+  return name ? name.split(/\s+/)[0] : null;
 }
 
 const TERMINAL_QUEUE = new Set(['completed', 'cancelled', 'no_show']);
 
-function ActionButton({ onClick, disabled, busy, children, tone = 'primary' }) {
-  const tones = {
-    primary: 'bg-blue-600 hover:bg-blue-700 text-white',
-    success: 'bg-green-600 hover:bg-green-700 text-white',
-    danger: 'bg-red-50 hover:bg-red-100 text-red-600 border border-red-200',
-  };
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled || busy}
-      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-50 ${tones[tone]}`}
-    >
-      {busy ? 'Working...' : children}
-    </button>
-  );
-}
-
 /**
- * Barber operational dashboard (Frontend Phase 3).
- * Backend is authoritative for queue state, SAWTE estimates and RBAC;
- * this page only displays backend values and calls existing endpoints.
+ * Barber operational dashboard (Phase 9 Step 6 redesign — presentation only).
+ * Same endpoints, same handlers, same data flow as before; backend owns
+ * queue state, SAWTE estimates and RBAC.
  */
 export default function BarberDashboard() {
   const { user } = useAuth();
@@ -54,6 +57,7 @@ export default function BarberDashboard() {
   const [actionError, setActionError] = useState('');
   const [notice, setNotice] = useState('');
   const [pending, setPending] = useState({});
+  const [skipTarget, setSkipTarget] = useState(null);
   const [availForm, setAvailForm] = useState({ date: todayStr(), start_time: '', end_time: '' });
   const [availBusy, setAvailBusy] = useState(false);
 
@@ -126,8 +130,13 @@ export default function BarberDashboard() {
     return { appt, service: appt.service_id != null ? serviceOf(appt.service_id) : undefined };
   }, [apptById, serviceOf]);
 
-  const waiting = queue.filter((q) => String(q.status).toLowerCase() === 'waiting');
+  const waiting = useMemo(
+    () => queue.filter((q) => String(q.status).toLowerCase() === 'waiting')
+      .sort((a, b) => a.queue_position - b.queue_position),
+    [queue]
+  );
   const serving = queue.find((q) => ['serving', 'in_progress'].includes(String(q.status).toLowerCase())) || null;
+  const nextUp = waiting[0] || null;
   const completedToday = queue.filter((q) => String(q.status).toLowerCase() === 'completed').length
     + todaysAppointments.filter((a) => String(a.status).toLowerCase() === 'completed').length;
 
@@ -202,212 +211,315 @@ export default function BarberDashboard() {
     <div className="min-h-screen bg-slate-50">
       <Navbar />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800">Barber Dashboard</h1>
-            <p className="text-slate-500 mt-1">
-              {profile ? (
-                <>
-                  {profile.name}
-                  {profile.specialization ? ` · ${profile.specialization}` : ''}
-                  {' · '}
-                  <span className="capitalize">{profile.availability_status}</span>
-                  {' · '}
-                  {displayDate()}
-                </>
-              ) : (
-                displayDate()
-              )}
-            </p>
-          </div>
-          <span className={`flex items-center gap-2 text-xs font-medium ${connected ? 'text-green-600' : 'text-slate-400'}`}>
-            <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`}></span>
-            {connected ? 'Live updates' : 'Live updates temporarily unavailable'}
-          </span>
-        </div>
+        <PageHeader
+          title={`${greeting()}${firstName(user) ? `, ${firstName(user)}` : ''}`}
+          description={
+            profile
+              ? `Here's your queue for today${profile.specialization ? ` · ${profile.specialization}` : ''}`
+              : 'Here is your operational overview.'
+          }
+          actions={
+            <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${connected ? 'text-[var(--sq-success)]' : 'text-[var(--sq-text-subtle)]'}`}>
+              <span className="relative flex h-2 w-2" aria-hidden="true">
+                {connected && (
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--sq-success)] opacity-60" />
+                )}
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${connected ? 'bg-[var(--sq-success)]' : 'bg-[var(--sq-border)]'}`} />
+              </span>
+              {connected ? 'Live updates' : 'Live updates temporarily unavailable'}
+            </span>
+          }
+        />
 
         {error && (
           <div className="mb-4"><ErrorState message={error} onRetry={fetchAll} /></div>
         )}
         {actionError && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{actionError}</div>
+          <div className="mb-4 p-3 bg-[var(--sq-danger-soft)] border border-[#fca5a5] rounded-[var(--sq-radius-lg)] text-[var(--sq-danger)] text-sm" role="alert">{actionError}</div>
         )}
         {notice && (
-          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">{notice}</div>
+          <div className="mb-4 p-3 bg-[var(--sq-success-soft)] border border-[#bbf7d0] rounded-[var(--sq-radius-lg)] text-[var(--sq-success)] text-sm">{notice}</div>
         )}
 
         {!profile && !error && (
-          <div className="bg-white rounded-xl border border-slate-200 mb-6">
+          <Card className="mb-6">
             <EmptyState title="No barber profile linked" message="Your account is not linked to a barber profile yet. Contact your administrator." />
-          </div>
+          </Card>
         )}
 
-        {/* Summary */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {[
-            { label: "Today's Appointments", value: todaysAppointments.length },
-            { label: 'Waiting Customers', value: waiting.length },
-            { label: 'Currently Serving', value: serving ? `#${serving.queue_position}` : '—' },
-            { label: 'Completed Today', value: completedToday },
-          ].map((c) => (
-            <div key={c.label} className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-              <p className="text-slate-500 text-sm">{c.label}</p>
-              <p className="text-3xl font-bold text-slate-800 mt-1">{c.value}</p>
+        <div className="grid lg:grid-cols-3 gap-4 items-start">
+          {/* MAIN COLUMN — current customer, primary action, next, queue */}
+          <div className="lg:col-span-2 space-y-4 min-w-0">
+            <ServingHero
+              serving={serving}
+              entryDetails={entryDetails}
+              pending={pending}
+              canServeNext={Boolean(profile) && waiting.length > 0}
+              onServeNext={serveNext}
+              onComplete={() => serving && completeEntry(serving.queue_id)}
+              onSkip={() => serving && setSkipTarget(serving)}
+            />
+
+            <NextUpCard
+              nextUp={nextUp}
+              entryDetails={entryDetails}
+              pending={pending}
+              hasActive={Boolean(serving)}
+              onServe={() => nextUp && serveEntry(nextUp.queue_id)}
+              onSkip={() => nextUp && setSkipTarget(nextUp)}
+            />
+
+            <Card>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="sq-h2">Live Queue</h2>
+                <span className="sq-caption text-[var(--sq-text-subtle)] sq-tnum">
+                  {waiting.length} waiting{serving ? ' · 1 serving' : ''}
+                </span>
+              </div>
+              {queue.length === 0 ? (
+                <EmptyState title="Queue is clear." message="No customers are currently waiting." />
+              ) : (
+                <div className="space-y-2">
+                  {[...queue].sort((a, b) => a.queue_position - b.queue_position).map((q) => {
+                    const { appt, service } = entryDetails(q);
+                    return (
+                      <QueueRow
+                        key={q.queue_id}
+                        entry={q}
+                        appt={appt}
+                        service={service}
+                        pending={pending}
+                        hasActive={Boolean(serving)}
+                        onServe={() => serveEntry(q.queue_id)}
+                        onComplete={() => completeEntry(q.queue_id)}
+                        onSkip={() => setSkipTarget(q)}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+          </div>
+
+          {/* SECONDARY COLUMN — summary, availability */}
+          <div className="space-y-4 min-w-0">
+            <div className="grid grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
+              <StatCard title="Today" value={todaysAppointments.length} icon={<CalendarDays size={18} aria-hidden="true" />} description="appointments" />
+              <StatCard title="Waiting" value={waiting.length} icon={<Users size={18} aria-hidden="true" />} description="customers" />
+              <StatCard title="Serving" value={serving ? `#${serving.queue_position}` : '—'} icon={<Activity size={18} aria-hidden="true" />} />
+              <StatCard title="Done" value={completedToday} icon={<Check size={18} aria-hidden="true" />} description="completed" />
             </div>
-          ))}
+
+            <Card>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="sq-h2">Availability</h2>
+                {profile && (
+                  <span className="sq-caption capitalize text-[var(--sq-text-muted)]">
+                    {profile.availability_status}
+                  </span>
+                )}
+              </div>
+              {availability.length === 0 ? (
+                <p className="sq-body-sm text-[var(--sq-text-muted)] mb-3">No windows for {fmtDate(today)}.</p>
+              ) : (
+                <div className="space-y-2 mb-3">
+                  {availability.map((v) => (
+                    <div key={v.availability_id} className="flex items-center gap-2 p-2.5 bg-[var(--sq-surface-muted)] rounded-[var(--sq-radius-lg)]">
+                      <span className="text-sm font-medium sq-tnum">
+                        {fmtTime(v.start_time)} – {fmtTime(v.end_time)}
+                      </span>
+                      <StatusBadge status={v.status} />
+                      <button
+                        onClick={() => toggleAvailability(v)}
+                        disabled={pending[`avail-${v.availability_id}`]}
+                        className="ml-auto text-sm text-[var(--sq-primary)] hover:underline font-medium disabled:opacity-50"
+                      >
+                        {pending[`avail-${v.availability_id}`] ? 'Saving...' : 'Toggle'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <form onSubmit={createAvailability} className="grid grid-cols-2 gap-2">
+                <Field label="Date">
+                  <Input type="date" value={availForm.date} min={today} onChange={(e) => setAvailForm({ ...availForm, date: e.target.value })} />
+                </Field>
+                <div className="grid grid-cols-2 gap-2 col-span-2 sm:col-span-1 lg:col-span-2 xl:col-span-1">
+                  <Field label="Start">
+                    <Input type="time" value={availForm.start_time} onChange={(e) => setAvailForm({ ...availForm, start_time: e.target.value })} />
+                  </Field>
+                  <Field label="End">
+                    <Input type="time" value={availForm.end_time} onChange={(e) => setAvailForm({ ...availForm, end_time: e.target.value })} />
+                  </Field>
+                </div>
+                <div className="col-span-2">
+                  <Button type="submit" fullWidth loading={availBusy} disabled={!profile} icon={<Plus size={15} aria-hidden="true" />}>
+                    Add Window
+                  </Button>
+                </div>
+              </form>
+            </Card>
+          </div>
         </div>
 
-        {/* Current customer */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Currently Serving</h2>
-          {serving ? (
-            (() => {
-              const { appt, service } = entryDetails(serving);
-              return <CurrentServing entry={serving} appt={appt} service={service} />;
-            })()
+        {/* BOTTOM — today's appointments */}
+        <Card className="mt-4">
+          <h2 className="sq-h2 mb-3">Today&apos;s Appointments</h2>
+          {todaysAppointments.length === 0 ? (
+            <EmptyState title="No appointments scheduled for today." />
           ) : (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-              <p className="text-slate-500 flex-1">No customer currently being served.</p>
-              <ActionButton onClick={serveNext} busy={pending.next} disabled={!profile || waiting.length === 0}>
-                Serve Next Customer
-              </ActionButton>
-            </div>
-          )}
-        </div>
-
-        {/* Live queue */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Live Queue</h2>
-          {queue.length === 0 ? (
-            <EmptyState title="No customers are currently waiting." />
-          ) : (
-            <div className="space-y-3">
-              {queue.map((q) => {
-                const { appt, service } = entryDetails(q);
+            <div className="space-y-2">
+              {todaysAppointments.map((a) => {
+                const svc = serviceOf(a.service_id);
+                const q = queue.find((x) => x.appointment_id === a.appointment_id);
                 return (
-                  <QueueRow
-                    key={q.queue_id}
-                    entry={q}
-                    appt={appt}
-                    service={service}
-                    pending={pending}
-                    hasActive={Boolean(serving)}
-                    onServe={() => serveEntry(q.queue_id)}
-                    onComplete={() => completeEntry(q.queue_id)}
-                    onSkip={() => skipEntry(q.queue_id)}
-                  />
+                  <div key={a.appointment_id} className="flex flex-wrap items-center gap-x-4 gap-y-1 p-3 bg-[var(--sq-surface-muted)] rounded-[var(--sq-radius-lg)]">
+                    <span className="font-semibold sq-tnum">
+                      {fmtTime(a.start_time)}{a.end_time ? ` – ${fmtTime(a.end_time)}` : ''}
+                    </span>
+                    <span className="text-sm text-[var(--sq-text-muted)]">Appt #{a.appointment_id}</span>
+                    <span className="text-sm font-medium">{svc?.service_name || 'Service'}</span>
+                    <span className="text-sm text-[var(--sq-text-muted)] sq-tnum">
+                      {svc?.duration_minutes != null ? `${svc.duration_minutes} min` : ''}
+                    </span>
+                    <span className="ml-auto flex items-center gap-2">
+                      {q && <span className="sq-caption text-[var(--sq-text-subtle)] sq-tnum">Q#{q.queue_position}</span>}
+                      <StatusBadge status={a.status} />
+                    </span>
+                  </div>
                 );
               })}
             </div>
           )}
-        </div>
-
-        {/* Today's appointments */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Today&apos;s Appointments</h2>
-          {todaysAppointments.length === 0 ? (
-            <EmptyState title="No appointments scheduled for today." />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-slate-500 border-b border-slate-100">
-                    <th className="py-2 pr-4 font-medium">Time</th>
-                    <th className="py-2 pr-4 font-medium">Customer</th>
-                    <th className="py-2 pr-4 font-medium">Service</th>
-                    <th className="py-2 pr-4 font-medium">Duration</th>
-                    <th className="py-2 pr-4 font-medium">Status</th>
-                    <th className="py-2 font-medium">Queue</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {todaysAppointments.map((a) => {
-                    const svc = serviceOf(a.service_id);
-                    const q = queue.find((x) => x.appointment_id === a.appointment_id);
-                    return (
-                      <tr key={a.appointment_id} className="border-b border-slate-50">
-                        <td className="py-2 pr-4 font-medium text-slate-800">
-                          {fmtTime(a.start_time)}{a.end_time ? ` – ${fmtTime(a.end_time)}` : ''}
-                        </td>
-                        <td className="py-2 pr-4 text-slate-600">Appt #{a.appointment_id}</td>
-                        <td className="py-2 pr-4 text-slate-600">{svc?.service_name || '—'}</td>
-                        <td className="py-2 pr-4 text-slate-600">{svc?.duration_minutes != null ? `${svc.duration_minutes} min` : '—'}</td>
-                        <td className="py-2 pr-4">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusStyle(a.status)}`}>
-                            {prettyStatus(a.status)}
-                          </span>
-                        </td>
-                        <td className="py-2 text-slate-600">{q ? `#${q.queue_position}` : '—'}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Availability */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-1">Availability</h2>
-          <p className="text-slate-500 text-sm mb-4">Your working windows. Toggle a window or add a new one.</p>
-          {availability.length === 0 ? (
-            <p className="text-slate-500 text-sm mb-4">No availability windows for {fmtDate(today)}.</p>
-          ) : (
-            <div className="space-y-2 mb-4">
-              {availability.map((v) => (
-                <div key={v.availability_id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
-                  <span className="text-sm font-medium text-slate-800">
-                    {fmtDate(v.date)} · {fmtTime(v.start_time)} – {fmtTime(v.end_time)}
-                  </span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${statusStyle(v.status)}`}>
-                    {v.status}
-                  </span>
-                  <button
-                    onClick={() => toggleAvailability(v)}
-                    disabled={pending[`avail-${v.availability_id}`]}
-                    className="ml-auto text-sm text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
-                  >
-                    {pending[`avail-${v.availability_id}`] ? 'Saving...' : 'Toggle'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <form onSubmit={createAvailability} className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-            <input type="date" value={availForm.date} min={today} onChange={(e) => setAvailForm({ ...availForm, date: e.target.value })}
-              className="px-3 py-2 rounded-lg border border-slate-300 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-            <input type="time" value={availForm.start_time} onChange={(e) => setAvailForm({ ...availForm, start_time: e.target.value })}
-              className="px-3 py-2 rounded-lg border border-slate-300 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-            <input type="time" value={availForm.end_time} onChange={(e) => setAvailForm({ ...availForm, end_time: e.target.value })}
-              className="px-3 py-2 rounded-lg border border-slate-300 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-            <button type="submit" disabled={availBusy || !profile}
-              className="col-span-2 sm:col-span-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition">
-              {availBusy ? 'Adding...' : 'Add Window'}
-            </button>
-          </form>
-        </div>
+        </Card>
       </main>
+
+      <ConfirmDialog
+        open={Boolean(skipTarget)}
+        title="Mark as no-show?"
+        description={
+          skipTarget
+            ? `Queue #${skipTarget.queue_position} will leave the waiting list. This follows the normal backend transition.`
+            : ''
+        }
+        confirmLabel="Mark no-show"
+        danger
+        loading={skipTarget ? pending[`skip-${skipTarget.queue_id}`] : false}
+        onCancel={() => setSkipTarget(null)}
+        onConfirm={() => {
+          if (skipTarget) {
+            skipEntry(skipTarget.queue_id);
+            setSkipTarget(null);
+          }
+        }}
+      />
     </div>
   );
 }
 
-function CurrentServing({ entry, appt, service }) {
+function ServingHero({ serving, entryDetails, pending, canServeNext, onServeNext, onComplete, onSkip }) {
+  if (!serving) {
+    return (
+      <Card padding="lg">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex-1 min-w-0">
+            <p className="sq-caption uppercase tracking-widest text-[var(--sq-text-subtle)]">Currently serving</p>
+            <p className="sq-h1 mt-1">No customer right now</p>
+            <p className="sq-body-sm text-[var(--sq-text-muted)] mt-1">Start the next waiting customer when you’re ready.</p>
+          </div>
+          <Button size="lg" onClick={onServeNext} loading={pending.next} disabled={!canServeNext} icon={<Play size={18} aria-hidden="true" />}>
+            Serve Next Customer
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  const { appt, service } = entryDetails(serving);
   return (
-    <div className="bg-gradient-to-r from-green-600 to-green-700 rounded-xl p-6 text-white">
-      <p className="text-green-200 text-sm mb-1">Now serving · Queue #{entry.queue_position}</p>
-      <p className="text-2xl font-bold">
-        {service?.service_name || 'Service'}
-      </p>
-      <p className="text-green-100 text-sm mt-1">
-        Appt #{entry.appointment_id}
-        {appt.start_time ? ` · ${fmtTime(appt.start_time)}${appt.end_time ? ` – ${fmtTime(appt.end_time)}` : ''}` : ''}
-        {service?.duration_minutes != null ? ` · ${service.duration_minutes} min` : ''}
-      </p>
-      <span className="inline-block mt-3 px-3 py-1 rounded-full text-xs font-medium bg-white/20 capitalize">
-        {prettyStatus(entry.status)}
-      </span>
-    </div>
+    <Card padding="lg" className="border-l-4 border-l-[var(--sq-success)]">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="sq-caption uppercase tracking-widest text-[var(--sq-success)]">Now serving</p>
+          <p className="sq-display sq-tnum mt-1">#{serving.queue_position}</p>
+        </div>
+        <StatusBadge status={serving.status} />
+      </div>
+      <div className="flex flex-wrap gap-x-5 gap-y-1.5 mt-3 sq-body-sm text-[var(--sq-text-muted)]">
+        <span className="inline-flex items-center gap-1.5">
+          <Scissors size={15} aria-hidden="true" /> {service?.service_name || 'Service'}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <User size={15} aria-hidden="true" /> Appt #{serving.appointment_id}
+        </span>
+        {(appt.start_time || appt.end_time) && (
+          <span className="inline-flex items-center gap-1.5 sq-tnum">
+            <Clock size={15} aria-hidden="true" />
+            {fmtTime(appt.start_time)}{appt.end_time ? ` – ${fmtTime(appt.end_time)}` : ''}
+          </span>
+        )}
+        {service?.duration_minutes != null && (
+          <span className="sq-tnum">{service.duration_minutes} min</span>
+        )}
+      </div>
+      <div className="flex flex-col sm:flex-row gap-2 mt-5">
+        <Button size="lg" tone="success" fullWidth onClick={onComplete} loading={pending[`complete-${serving.queue_id}`]} icon={<Check size={18} aria-hidden="true" />}>
+          Complete Service
+        </Button>
+        <Button size="lg" tone="danger" onClick={onSkip} loading={pending[`skip-${serving.queue_id}`]}>
+          Skip
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function NextUpCard({ nextUp, entryDetails, pending, hasActive, onServe, onSkip }) {
+  if (!nextUp) {
+    return (
+      <Card>
+        <div className="flex items-center gap-3">
+          <span className="flex w-10 h-10 rounded-[var(--sq-radius-lg)] bg-[var(--sq-surface-muted)] text-[var(--sq-text-subtle)] items-center justify-center shrink-0" aria-hidden="true">
+            <Users size={18} />
+          </span>
+          <div>
+            <p className="font-semibold">Queue is clear</p>
+            <p className="sq-body-sm text-[var(--sq-text-muted)]">No customers waiting right now.</p>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  const { appt, service } = entryDetails(nextUp);
+  return (
+    <Card className="border-l-4 border-l-[var(--sq-accent)]">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="flex w-11 h-11 rounded-full bg-[var(--sq-accent-soft)] text-[var(--sq-accent)] items-center justify-center font-bold sq-tnum text-lg shrink-0" aria-hidden="true">
+          {nextUp.queue_position}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="sq-caption uppercase tracking-widest text-[var(--sq-text-subtle)]">Next up</p>
+          <p className="font-semibold truncate">
+            {service?.service_name || 'Service'}
+            <span className="font-normal text-[var(--sq-text-muted)]"> · Appt #{nextUp.appointment_id}</span>
+          </p>
+          <p className="sq-body-sm text-[var(--sq-text-muted)] sq-tnum">
+            {appt.start_time ? `${fmtTime(appt.start_time)} · ` : ''}
+            {nextUp.estimated_wait_minutes != null ? `~${nextUp.estimated_wait_minutes} min wait` : 'Calculating…'}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={onServe} loading={pending[`serve-${nextUp.queue_id}`]} disabled={hasActive}
+            icon={<Play size={14} aria-hidden="true" />}>
+            Serve
+          </Button>
+          <Button size="sm" tone="danger" onClick={onSkip} loading={pending[`skip-${nextUp.queue_id}`]}>
+            Skip
+          </Button>
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -418,43 +530,41 @@ function QueueRow({ entry, appt, service, pending, hasActive, onServe, onComplet
   const terminal = TERMINAL_QUEUE.has(status) || (!isWaiting && !isServing);
 
   return (
-    <div className="flex flex-wrap items-center gap-3 p-4 bg-slate-50 rounded-xl">
-      <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold shrink-0">
+    <div className="flex flex-wrap items-center gap-3 p-3 bg-[var(--sq-surface-muted)] rounded-[var(--sq-radius-lg)]">
+      <span className="flex w-9 h-9 rounded-full bg-[var(--sq-primary)] text-white items-center justify-center font-bold sq-tnum shrink-0" aria-hidden="true">
         {entry.queue_position}
-      </div>
+      </span>
       <div className="min-w-0 flex-1">
-        <p className="font-medium text-slate-800">
+        <p className="font-medium text-sm truncate">
           {service?.service_name || 'Service'}
-          <span className="text-slate-500 font-normal"> · Appt #{entry.appointment_id}</span>
+          <span className="font-normal text-[var(--sq-text-muted)]"> · Appt #{entry.appointment_id}</span>
         </p>
-        <p className="text-sm text-slate-500">
-          {appt.start_time ? `${fmtTime(appt.start_time)}${appt.end_time ? ` – ${fmtTime(appt.end_time)}` : ''} · ` : ''}
-          {service?.duration_minutes != null ? `${service.duration_minutes} min · ` : ''}
-          {entry.estimated_wait_minutes != null ? `~${entry.estimated_wait_minutes} min wait` : 'Calculating...'}
+        <p className="text-xs text-[var(--sq-text-muted)] sq-tnum">
+          {appt.start_time ? `${fmtTime(appt.start_time)} · ` : ''}
+          {entry.estimated_wait_minutes != null ? `~${entry.estimated_wait_minutes} min` : 'Calculating…'}
         </p>
         <div className="flex items-center gap-2 mt-1">
-          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusStyle(entry.status)}`}>
-            {prettyStatus(entry.status)}
-          </span>
+          <StatusBadge status={entry.status} />
           {entry.confidence && <ConfidenceBadge level={entry.confidence} />}
         </div>
       </div>
       {!terminal && (
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           {isWaiting && (
-            <ActionButton onClick={onServe} busy={pending[`serve-${entry.queue_id}`]} disabled={hasActive} title={hasActive ? 'Finish the current customer first' : 'Start serving'}>
+            <Button size="sm" onClick={onServe} loading={pending[`serve-${entry.queue_id}`]} disabled={hasActive}
+              title={hasActive ? 'Finish the current customer first' : 'Start serving'}>
               Serve
-            </ActionButton>
+            </Button>
           )}
           {isServing && (
-            <ActionButton onClick={onComplete} busy={pending[`complete-${entry.queue_id}`]} tone="success">
+            <Button size="sm" tone="success" onClick={onComplete} loading={pending[`complete-${entry.queue_id}`]}>
               Complete
-            </ActionButton>
+            </Button>
           )}
           {isWaiting && (
-            <ActionButton onClick={onSkip} busy={pending[`skip-${entry.queue_id}`]} tone="danger">
+            <Button size="sm" tone="danger" onClick={onSkip} loading={pending[`skip-${entry.queue_id}`]}>
               Skip
-            </ActionButton>
+            </Button>
           )}
         </div>
       )}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getDashboardPath, normalizeRole } from '../utils/roles';
 
@@ -61,10 +62,11 @@ export default function Navbar() {
                 <button onClick={handleLogout} className="hidden sm:inline text-sm text-red-500 hover:text-red-700 font-medium">Logout</button>
                 <button
                   onClick={() => setMenuOpen((v) => !v)}
-                  aria-label="Menu"
-                  className="sm:hidden px-2 py-1 text-slate-600 text-xl leading-none"
+                  aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+                  aria-expanded={menuOpen}
+                  className="sm:hidden p-2 -mr-2 text-slate-600 hover:text-slate-900 leading-none min-w-[2.75rem] min-h-[2.75rem] inline-flex items-center justify-center"
                 >
-                  ☰
+                  {menuOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
                 </button>
               </>
             ) : (
