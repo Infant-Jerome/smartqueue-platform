@@ -66,9 +66,11 @@
   --sq-transition-normal: 200ms ease;
 }
 
+/* Keep box-sizing only. Never reset margin/padding here: Tailwind v4
+   ships preflight and utilities in cascade layers, and unlayered CSS wins
+   over layered CSS, so a global margin reset would disable all spacing
+   utilities such as mx-auto and px-4. Preflight already resets margins. */
 * {
-  margin: 0;
-  padding: 0;
   box-sizing: border-box;
 }
 
