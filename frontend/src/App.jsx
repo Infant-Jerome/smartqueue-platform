@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { getDashboardPath } from './utils/roles';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
 import Dashboard from './pages/Dashboard';
 import Services from './pages/Services';
 import Barbers from './pages/Barbers';
@@ -46,6 +47,7 @@ function AppRoutes() {
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={user ? <Navigate to={home} replace /> : <Login />} />
       <Route path="/register" element={user ? <Navigate to={home} replace /> : <Register />} />
+      <Route path="/forgot-password" element={user ? <Navigate to={home} replace /> : <ForgotPassword />} />
       <Route path="/unauthorized" element={<Unauthorized />} />
       {/* Customer */}
       <Route path="/dashboard" element={<ProtectedRoute roles={['customer']}><Dashboard /></ProtectedRoute>} />

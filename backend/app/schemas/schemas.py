@@ -339,3 +339,46 @@ class ApiResponse(BaseModel):
     success: bool = True
     message: str = "OK"
     data: Optional[Any] = None
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Forgot-password input. Email only; reply is always generic."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailType = Field(...)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: Any) -> Any:
+        return _normalize_email(v)
+
+
+class VerifyResetOtpRequest(BaseModel):
+    """OTP verification input. Raw OTP is hashed server-side, never stored."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailType = Field(...)
+    otp: str = Field(..., min_length=6, max_length=6)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: Any) -> Any:
+        return _normalize_email(v)
+
+
+class ResetPasswordRequest(BaseModel):
+    """Password reset input. Token is a short-lived JWT bound to the OTP row."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reset_token: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=6, max_length=128)
+    confirm_password: str = Field(..., min_length=6, max_length=128)
+
+    @model_validator(mode="after")
+    def _passwords_match(self):
+        if self.new_password != self.confirm_password:
+            raise ValueError("Passwords do not match")
+        return self

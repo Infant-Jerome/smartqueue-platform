@@ -12,12 +12,15 @@ from app.models import User
 from app.models.user import UserRole
 from app.schemas.schemas import (
     ApiResponse,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
     RoleUpdate,
     TokenResponse,
     UserCreate,
     UserLogin,
     UserResponse,
     UserUpdate,
+    VerifyResetOtpRequest,
 )
 
 router = APIRouter()
@@ -127,3 +130,53 @@ def update_user_role(
     db.commit()
     db.refresh(target)
     return ok(UserResponse.model_validate(target), message="Role updated")
+
+
+@router.post("/forgot-password", response_model=ApiResponse)
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """Issue an OTP email. Reply is always generic (no enumeration)."""
+    from app.services import password_reset_service as prs
+
+    try:
+        prs.request_reset(db, payload.email)
+    except prs.ResendCooldownError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)
+        )
+    except prs.EmailDeliveryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        )
+    return ok(None, message=prs.GENERIC_FORGOT_MESSAGE)
+
+
+@router.post("/verify-reset-otp", response_model=ApiResponse)
+def verify_reset_otp(payload: VerifyResetOtpRequest, db: Session = Depends(get_db)):
+    """Verify the OTP; return a short-lived reset authorization token."""
+    from app.services import password_reset_service as prs
+
+    try:
+        reset_token = prs.verify_otp(db, payload.email, payload.otp)
+    except prs.TooManyAttemptsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)
+        )
+    except (prs.InvalidOtpError, prs.ExpiredOtpError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        )
+    return ok({"reset_token": reset_token}, message="Code verified.")
+
+
+@router.post("/reset-password", response_model=ApiResponse)
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Consume the reset token and set the new password hash."""
+    from app.services import password_reset_service as prs
+
+    try:
+        prs.reset_password(db, payload.reset_token, payload.new_password)
+    except prs.InvalidResetTokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)
+        )
+    return ok(None, message="Password reset successfully.")

@@ -17,6 +17,16 @@ from starlette.responses import JSONResponse
 
 LOGIN_PATHS = frozenset({"/api/v1/auth/login", "/api/v1/auth/register"})
 
+# Password-reset endpoints always reply 200/400 (never 401 on failure),
+# so they need a request-count limiter rather than the failure-count one.
+RESET_PATHS = frozenset(
+    {
+        "/api/v1/auth/forgot-password",
+        "/api/v1/auth/verify-reset-otp",
+        "/api/v1/auth/reset-password",
+    }
+)
+
 # Indirection for tests (monkeypatch rl._clock, never the global clock).
 _clock = time.monotonic
 
@@ -75,4 +85,50 @@ class LoginRateLimitMiddleware(BaseHTTPMiddleware):
             return response
         except Exception:
             # Never break authentication on limiter failure.
+            return await call_next(request)
+
+
+class ResetRequestRateLimitMiddleware(BaseHTTPMiddleware):
+    """Cap password-reset requests per client IP (OTP/email abuse guard).
+
+    The reset endpoints never emit 401 on failure, so this limiter counts
+    all requests (not failures): >max_requests per window per IP -> 429
+    envelope. Bounded, never raises, fails open on error.
+    """
+
+    def __init__(self, app, max_requests: int = 20, window_seconds: int = 600):
+        super().__init__(app)
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self._hits: dict[str, deque] = {}
+
+    def _client_ip(self, request: Request) -> str:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        client = request.client
+        return client.host if client else "unknown"
+
+    def clear(self) -> None:
+        self._hits.clear()
+
+    async def dispatch(self, request: Request, call_next):
+        try:
+            if request.method != "POST" or request.url.path not in RESET_PATHS:
+                return await call_next(request)
+            now = _clock()
+            key = f"{self._client_ip(request)}"
+            bucket = self._hits.setdefault(key, deque())
+            cutoff = now - self.window_seconds
+            while bucket and bucket[0] <= cutoff:
+                bucket.popleft()
+            if len(bucket) >= self.max_requests:
+                return JSONResponse(
+                    status_code=429,
+                    content={"success": False, "message": "Too many attempts. Please try again later.", "data": None},
+                )
+            bucket.append(now)
+            return await call_next(request)
+        except Exception:
+            # Never break password reset on limiter failure.
             return await call_next(request)

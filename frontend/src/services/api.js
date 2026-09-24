@@ -32,10 +32,10 @@ api.interceptors.response.use(
     if (status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      // Don't hard-redirect when the 401 came from login/register itself;
+      // Don't hard-redirect when the 401 came from a public auth form;
       // the form needs to display the error instead of reloading.
       const path = window.location.pathname;
-      if (path !== '/login' && path !== '/register') {
+      if (path !== '/login' && path !== '/register' && path !== '/forgot-password') {
         window.location.href = '/login';
       }
     }

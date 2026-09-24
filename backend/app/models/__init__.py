@@ -3,6 +3,7 @@
 from app.models.appointment import Appointment
 from app.models.availability import BarberAvailability
 from app.models.barber import Barber
+from app.models.password_reset import PasswordResetToken
 from app.models.queue import Queue
 from app.models.salon import Salon
 from app.models.service import Service
@@ -21,6 +22,7 @@ __all__ = [
     "BarberAvailability",
     "Appointment",
     "Queue",
+    "PasswordResetToken",
     "AppointmentStatusHistory",
     "Notification",
 ]
