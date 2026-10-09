@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Added
+- Phase 9 premium UI: design-system tokens, `components/ui` + `components/admin`, redesigned dashboards, booking, queue card (`63e540e`)
+- Email OTP password reset: `password_reset_tokens` table + migration, `POST /api/v1/auth/forgot-password|verify-reset-otp|reset-password`, 4-screen `/forgot-password` flow; requires `EMAIL_*` Render env for delivery (`1dfb39f`)
+- Abuse hardening: register 409/422 spraying counted by the login limiter; password-reset email fails closed (503) in production when no email provider is configured
+
+### Fixed
+- Frontend layout: removed unlayered global margin/padding reset that overrode Tailwind v4 utilities (`495fec0`)
+- `test_ws10_unauthorized_salon_isolated`: structured scope assertion (old substring check collided with ISO date digits)
+
 ## [0.3.0] - 2026-09-14
 
 ### Added

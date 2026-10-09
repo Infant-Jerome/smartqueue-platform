@@ -232,3 +232,39 @@ def test_existing_login_registration_rbac_intact(client, customer_user, admin_us
     assert client.patch("/api/v1/auth/users/1/role", json={"role": "admin"}, headers=chead).status_code == 403
     ahead = auth_headers(client, admin_user.email, "adminpass")
     assert client.get("/api/v1/auth/me", headers=ahead).status_code == 200
+
+
+def test_register_spraying_trips_login_limiter():
+    from fastapi import FastAPI
+    from fastapi.responses import JSONResponse
+    from fastapi.testclient import TestClient
+
+    from app.core.rate_limit import LoginRateLimitMiddleware
+
+    app = FastAPI()
+
+    @app.post("/api/v1/auth/register")
+    def register():
+        return JSONResponse(status_code=409, content={"success": False, "message": "Email already registered", "data": None})
+
+    app.add_middleware(LoginRateLimitMiddleware, max_failures=3, window_seconds=60)
+    tc = TestClient(app)
+    codes = [tc.post("/api/v1/auth/register").status_code for _ in range(5)]
+    assert codes[:3] == [409] * 3
+    assert codes[3] == 429 and codes[4] == 429
+
+
+def test_unconfigured_email_fails_closed_in_production(client, customer_user, monkeypatch):
+    import types
+
+    import app.services.password_reset_service as prs
+
+    monkeypatch.setattr(
+        prs,
+        "get_settings",
+        lambda: types.SimpleNamespace(is_production=True, JWT_SECRET_KEY="test-pepper"),
+    )
+    for email in (customer_user.email, "unknown-addr@test.local"):
+        r = client.post(FORGOT, json={"email": email}, headers=_ip("t-prod"))
+        assert r.status_code == 503, r.text
+    assert MockEmailProvider.SENT == []

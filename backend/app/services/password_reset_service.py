@@ -99,11 +99,29 @@ def _active_rows(db: Session, user_id: int):
     )
 
 
+def _ensure_email_configured() -> None:
+    """Fail closed when production has no email provider (all addresses alike).
+
+    Called before any user lookup so configured-vs-not cannot become an
+    enumeration oracle. Dev/test (non-production) keeps Mock success.
+    """
+    from app.notifications.preferences import Channel
+    from app.notifications.providers import get_provider
+    from app.notifications.providers.email import MockEmailProvider
+
+    if isinstance(get_provider(Channel.EMAIL), MockEmailProvider) and get_settings().is_production:
+        # Production honesty: the Mock records in-memory and reports success
+        # without delivering anything. Fail closed until EMAIL_* is set.
+        logger.warning("Password-reset email requested with no email provider configured")
+        raise EmailDeliveryError("Email service is temporarily unavailable. Please try again later.")
+
+
 def _send_otp_email(to_email: str, otp: str) -> None:
     """Deliver the OTP via the existing email provider factory."""
     from app.notifications.preferences import Channel
     from app.notifications.providers import get_provider
 
+    _ensure_email_configured()
     provider = get_provider(Channel.EMAIL)
     body = (
         "SmartQueue Password Reset\n\n"
@@ -128,6 +146,7 @@ def request_reset(db: Session, email: str) -> None:
 
     Raises ResendCooldownError / EmailDeliveryError for known users.
     """
+    _ensure_email_configured()
     normalized = (email or "").strip().lower()
     user = db.query(User).filter(func.lower(User.email) == normalized).first()
     if user is None:

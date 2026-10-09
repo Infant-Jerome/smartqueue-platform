@@ -347,16 +347,26 @@ def test_ws10_unauthorized_salon_isolated(
     False and contains none of salon1's queue ids/positions.
     """
     _ws_base_for_salon(salon.salon_id)
-    appt = _book(client, customer_headers, salon_barber.barber_id,
-                 salon_service.service_id, slot_date.isoformat(), "10:00",
-                 salon_id=salon.salon_id)
+    _ = _book(client, customer_headers, salon_barber.barber_id,
+                  salon_service.service_id, slot_date.isoformat(), "10:00",
+                  salon_id=salon.salon_id)
     full = ws_queue_url(salon2.salon_id, token=_token(customer_headers),
                         date_str=slot_date.isoformat())
     with client.websocket_connect(full) as ws:
         msg = _recv_event(ws, what="foreign-salon snapshot")
         text = _payload_text(msg)
         assert "has_queue" in text and "false" in text, f"foreign scope must be empty: {msg}"
-        assert str(appt["appointment_id"]) not in text, f"foreign scope leaks salon1 data: {msg}"
+        # Structured isolation check (substring matching is unsound: small ids
+        # like "1" collide with ISO date digits such as "2026-10-16").
+        data = msg.get("data", msg) if isinstance(msg, dict) else {}
+        assert data.get("has_queue") is False, f"foreign scope must be empty: {msg}"
+        assert "entries" not in data, f"foreign scope leaks entries: {msg}"
+        assert data.get("my_queue_id") is None and data.get("queue_id") is None, (
+            f"foreign scope leaks queue ids: {msg}"
+        )
+        assert (data.get("scope") or {}).get("salon_id") == salon2.salon_id, (
+            f"foreign scope mismatch: {msg}"
+        )
         _assert_safe_payload(msg)
 
 
@@ -624,8 +634,8 @@ def test_ws22_failed_mutation_emits_no_event(
     """
     _ws_base_for_salon(salon.salon_id)
     appt = _book(client, customer_headers, salon_barber.barber_id,
-                 salon_service.service_id, slot_date.isoformat(), "10:00",
-                  salon_id=salon.salon_id)
+                    salon_service.service_id, slot_date.isoformat(), "10:00",
+                    salon_id=salon.salon_id)
     _ = _find_queue_id(client, admin_headers, appt["appointment_id"])
     full = ws_queue_url(salon.salon_id, token=_token(admin_headers),
                         date_str=slot_date.isoformat())

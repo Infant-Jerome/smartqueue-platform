@@ -16,6 +16,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
 LOGIN_PATHS = frozenset({"/api/v1/auth/login", "/api/v1/auth/register"})
+REGISTER_PATH = "/api/v1/auth/register"
 
 # Password-reset endpoints always reply 200/400 (never 401 on failure),
 # so they need a request-count limiter rather than the failure-count one.
@@ -45,7 +46,9 @@ class LoginRateLimitMiddleware(BaseHTTPMiddleware):
 
     Only failed attempts count, so legitimate login bursts (including the
     project's own test suite, which shares one TestClient IP) are never
-    throttled — only credential guessing is.
+    throttled — only credential guessing is. Registration abuse is also
+    counted: rapid 409/422s on the register path indicate email spraying
+    or mass-creation scripting (normal users never register 20x/minute).
     """
 
     def __init__(self, app, max_failures: int = 20, window_seconds: int = 60):
@@ -81,6 +84,9 @@ class LoginRateLimitMiddleware(BaseHTTPMiddleware):
                 )
             response = await call_next(request)
             if response.status_code == 401:
+                bucket.append(now)
+            elif request.url.path == REGISTER_PATH and response.status_code in (409, 422):
+                # Registration spraying / mass-creation scripting guard.
                 bucket.append(now)
             return response
         except Exception:
