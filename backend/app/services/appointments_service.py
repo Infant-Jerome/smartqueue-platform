@@ -23,6 +23,8 @@ Concurrency note (SQLite vs Postgres/MySQL):
 from datetime import date, datetime, time, timedelta
 
 from fastapi import HTTPException, status
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -114,6 +116,35 @@ def _coerce_time(value, label: str = "time") -> time:
 
 def _overlaps(start_a: time, end_a: time, start_b: time, end_b: time) -> bool:
     return start_a < end_b and end_a > start_b
+
+
+def _is_postgres(db: Session) -> bool:
+    """True only on a live PostgreSQL connection (advisory-lock path)."""
+    try:
+        bind = db.bind
+        return bind is not None and bind.dialect.name == "postgresql"
+    except Exception:
+        return False
+
+
+def acquire_barber_day_lock(db: Session, barber_id: int, appt_date: date) -> None:
+    """Serialize same-barber same-day bookings on PostgreSQL.
+
+    UNVERIFIED (no Postgres with known credentials in this environment;
+    see docs/booking-race-pg-verification.md): on PostgreSQL takes the
+    transaction-scoped advisory lock ``pg_advisory_xact_lock(barber_id,
+    YYYYMMDD)`` so concurrent check-then-insert transactions for the same
+    barber-day serialize. No-op on SQLite/other dialects (SQLite serializes
+    writers via its own database lock). Lock releases automatically at
+    commit/rollback; safe to call outside an explicit transaction.
+    """
+    if not _is_postgres(db):
+        return
+    day_key = appt_date.year * 10000 + appt_date.month * 100 + appt_date.day
+    db.execute(
+        text("SELECT pg_advisory_xact_lock(:k1, :k2)"),
+        {"k1": int(barber_id), "k2": int(day_key)},
+    )
 
 
 def _calc_end_time(start: time, duration_minutes: int) -> time:
@@ -370,6 +401,10 @@ def create_appointment(db: Session, user: User, data: AppointmentCreate) -> Appo
             detail="Cannot book an appointment in the past",
         )
 
+    # PG race guard (UNVERIFIED, no-op on SQLite): serialize same-barber
+    # same-day check-then-insert transactions before the overlap reads.
+    acquire_barber_day_lock(db, data.barber_id, appt_date)
+
     # 3. Server-calculated end_time wins. A client-supplied end_time that
     #    disagrees with start + service.duration_minutes => 422.
     end = _calc_end_time(start, service.duration_minutes)
@@ -480,6 +515,15 @@ def create_appointment(db: Session, user: User, data: AppointmentCreate) -> Appo
     except HTTPException:
         db.rollback()
         raise
+    except IntegrityError:
+        # Postgres exclusion-constraint backstop (UNVERIFIED draft migration
+        # in alembic/drafts/): a concurrent winner committed first => 409,
+        # never a 500. Safe on SQLite (no such constraint exists there).
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Selected time conflicts with an existing appointment.",
+        )
     except Exception:
         db.rollback()
         raise

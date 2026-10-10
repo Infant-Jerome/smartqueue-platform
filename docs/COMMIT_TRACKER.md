@@ -37,3 +37,21 @@ Proposed Phase 3 commits (split for cadence, ≥2 days):
 3. `chore(db): add alembic initial schema migration`
 4. `ci(deploy): add backend/frontend workflows, render and vercel config`
 5. `docs: update readme, changelog, architecture for phase 3`
+
+## Week 7 (Sep 24) — Phase 9 premium UI, layout fix, password reset · Target ≥ 3
+
+| Day | Commit | Link |
+| --- | --- | --- |
+| Sep 24 | `feat(frontend): Phase 9 premium UI (design system, dashboards, booking, queue card)` (`63e540e`) | ✅ |
+| Sep 24 | `fix(frontend): restore Tailwind layout spacing` (`495fec0`) | ✅ |
+| Sep 24 | `feat(auth): add email OTP password reset` (`1dfb39f`) | ✅ |
+
+**Count: 3 · Days: 1 ⚠️** — count met, single-day cluster; spread over ≥2 days in future weeks.
+
+## Week 9 (Oct 9) — Auth audit hardening · Target ≥ 3
+
+| Day | Commit | Link |
+| --- | --- | --- |
+| Oct 9 | `fix(auth): close register spam gap, fail-closed reset email, fix ws10 assertion` (`9c0e895`) | ✅ |
+
+**Count: 1 (so far) · Days: 1** — below weekly floor; needs 2+ more commits on ≥1 other day.

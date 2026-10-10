@@ -39,6 +39,11 @@ The platform reduces the time customers spend waiting in the shop and gives the 
 
 - View active services and barbers without logging in
 
+### Password reset (email OTP)
+
+- Forgot-password flow: `POST /api/v1/auth/forgot-password` (issues 6-digit OTP) → `POST /api/v1/auth/verify-reset-otp` → `POST /api/v1/auth/reset-password`; frontend `/forgot-password` page. Replies are generic (no email enumeration); OTPs are HMAC-hashed, 10-minute expiry.
+- Delivery requires Render env vars (SMTP, no secrets committed): `EMAIL_ENABLED=true` plus `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASS`, `EMAIL_FROM`. Without a provider, production fails closed (503) and local dev uses the mock path.
+
 ---
 
 ## 3. Booking & Queue Management

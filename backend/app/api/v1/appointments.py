@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -481,6 +482,12 @@ def update_appointment(
             db, appointment.salon_id, barber, service, new_start, new_end
         )
         _check_barber_availability(db, barber, new_date, new_start, new_end)
+        # PG race guard (UNVERIFIED, no-op on SQLite): same advisory lock
+        # as the booking-create path so reschedule check-then-write
+        # serializes per barber-day.
+        appointments_service.acquire_barber_day_lock(
+            db, appointment.barber_id, new_date
+        )
         _check_slot_conflicts(
             db,
             appointment.barber_id,
@@ -512,7 +519,17 @@ def update_appointment(
             _sync_queue_status(db, appointment.appointment_id, new_status)
             _record_history(db, appointment.appointment_id, current, new_status)
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Postgres exclusion-constraint backstop (UNVERIFIED draft migration
+        # in alembic/drafts/): concurrent reschedule winner committed first
+        # => 409, never a 500. Safe on SQLite.
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Selected time conflicts with an existing appointment.",
+        )
     db.refresh(appointment)
     try:  # WS2: reschedule/status emit post-commit only (this path bypasses the service)
         from app.services import queue_events as _qe

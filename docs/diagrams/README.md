@@ -62,7 +62,9 @@ flowchart LR
 
 ## 2. Entity Relationship Diagram (ERD)
 
-The ER diagram visualizes the 5-table schema. `appointments` is the central entity linking customers, barbers, and services, while `queue` provides 1:1 live queue tracking per appointment.
+The live schema is 10 tables — `users`, `salons`, `barbers`, `services`, `barber_availability`, `appointments`, `queue`, `appointment_status_history`, `notifications`, `password_reset_tokens` (verified against `backend/app/models/*.py` + `backend/app/notifications/models.py` and `backend/alembic/versions/*.py`). `appointments` is the central entity linking customers, barbers, and services, while `queue` provides 1:1 live queue tracking per appointment.
+
+> NOTE (stale sources): the rendered `SmartQueueER.png` and its editable sources (`SmartQueueER.dbml`, `SmartQueueER.mmd`) — and the Mermaid ER text + Table Summary below, copied from them — still show only the original 5 tables (`users`, `barbers`, `services`, `appointments`, `queue`). They have NOT been redrawn; treat them as a partial view until updated.
 
 ```mermaid
 erDiagram
