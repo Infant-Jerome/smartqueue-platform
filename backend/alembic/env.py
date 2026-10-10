@@ -67,7 +67,10 @@ if DATABASE_URL and not DATABASE_URL.startswith("sqlite"):
     except Exception:
         pass
 if DATABASE_URL:
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    config.set_main_option(
+    "sqlalchemy.url",
+    DATABASE_URL.replace("%", "%%"),
+)
 
 # --- Metadata discovery: canonical Base + all 8 models -------------------
 from app.db.base import Base  # noqa: E402  (canonical Base, single source of truth)
