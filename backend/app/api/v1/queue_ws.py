@@ -298,9 +298,15 @@ async def queue_websocket(
         _loop = None
     if _publisher is not None and _loop is not None:
         def _forward(published: dict) -> None:
+            # Per-socket delivery (NOT broadcast_event fan-out): this bridge
+            # subscriber is registered once per connection, so fanning out
+            # here would deliver N copies per socket for N connections
+            # (PERF-02 N x N). Each subscriber delivers at most one
+            # per-recipient scoped copy to its OWN socket only; the manager
+            # applies role scoping (customers: own entry or serving summary).
             try:
                 fut = asyncio.run_coroutine_threadsafe(
-                    manager.broadcast_event(published), _loop
+                    manager.deliver_event_to(websocket, published), _loop
                 )
 
                 def _swallow(fut) -> None:

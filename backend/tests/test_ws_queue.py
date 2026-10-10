@@ -760,3 +760,111 @@ def test_ws26_no_pii_in_payloads(
               salon_id=salon.salon_id)
         evt = _expect_broadcast(ws, ("waiting", "created", "queue"), "create")
         _assert_safe_payload(evt)
+
+
+# ===========================================================================
+# SCOPING 27-28: per-recipient push isolation (P0) + single copy (PERF-02).
+# ===========================================================================
+
+
+def _data_of(msg):
+    assert isinstance(msg, dict), msg
+    data = msg.get("data")
+    assert isinstance(data, dict), msg
+    return data
+
+
+def test_ws27_customer_push_isolated_from_other_customer(
+    client, admin_headers, customer_headers, customer2_headers,
+    salon_barber, salon_service, salon, slot_date, slot_availability,
+):
+    """27: a customer socket never receives another customer's ids on push.
+
+    A and B book the same barber/date. B's socket is open while A's booking
+    push lands: B must get exactly one copy, as queue.updated, containing
+    neither A's appointment_id nor A's queue_id (serving-summary-only).
+    The staff socket still receives the full entry (A's ids + position).
+    """
+    _ws_base_for_salon(salon.salon_id)
+    date_str = slot_date.isoformat()
+    url_b = ws_queue_url(salon.salon_id, token=_token(customer2_headers),
+                         barber_id=salon_barber.barber_id, date_str=date_str)
+    url_staff = ws_queue_url(salon.salon_id, token=_token(admin_headers),
+                             barber_id=salon_barber.barber_id, date_str=date_str)
+    with client.websocket_connect(url_b) as ws_b:
+        with client.websocket_connect(url_staff) as ws_staff:
+            _recv_event(ws_b, what="B snapshot")
+            _recv_event(ws_staff, what="staff snapshot")
+            appt_a = _book(client, customer_headers, salon_barber.barber_id,
+                           salon_service.service_id, date_str, "10:00",
+                           salon_id=salon.salon_id)
+            qid_a = _find_queue_id(client, admin_headers, appt_a["appointment_id"])
+
+            push_b = _recv_event(ws_b, what="A-booking push to B")
+            assert push_b.get("event") == "queue.updated", push_b
+            data_b = _data_of(push_b)
+            assert data_b.get("appointment_id") != appt_a["appointment_id"], push_b
+            assert data_b.get("queue_id") != qid_a, push_b
+            assert "entries" not in data_b, f"B push leaks entry list: {push_b}"
+            _assert_safe_payload(push_b)
+
+            push_staff = _recv_event(ws_staff, what="A-booking push to staff")
+            data_s = _data_of(push_staff)
+            assert data_s.get("appointment_id") == appt_a["appointment_id"], push_staff
+            assert data_s.get("queue_id") == qid_a, push_staff
+            assert "queue_position" in data_s and "status" in data_s, push_staff
+
+            # Exactly one copy per socket for this mutation (PERF-02).
+            assert try_receive(ws_b, timeout=1.5) is None, "B got a duplicate push"
+            assert try_receive(ws_staff, timeout=1.5) is None, "staff got a duplicate push"
+
+
+def test_ws28_push_isolation_is_symmetric_and_single_copy(
+    client, admin_headers, customer_headers, customer2_headers,
+    salon_barber, salon_service, salon, slot_date, slot_availability,
+):
+    """28: symmetric isolation -- A's socket never sees B's ids; one copy each.
+
+    Three concurrent sockets (A, B, staff): B books after both customers are
+    connected. A gets exactly one summary-only copy with none of B's ids;
+    B gets exactly one copy carrying its OWN ids; staff gets the full entry.
+    """
+    _ws_base_for_salon(salon.salon_id)
+    date_str = slot_date.isoformat()
+    url_a = ws_queue_url(salon.salon_id, token=_token(customer_headers),
+                         barber_id=salon_barber.barber_id, date_str=date_str)
+    url_b = ws_queue_url(salon.salon_id, token=_token(customer2_headers),
+                         barber_id=salon_barber.barber_id, date_str=date_str)
+    url_staff = ws_queue_url(salon.salon_id, token=_token(admin_headers),
+                             barber_id=salon_barber.barber_id, date_str=date_str)
+    with client.websocket_connect(url_a) as ws_a:
+        with client.websocket_connect(url_b) as ws_b:
+            with client.websocket_connect(url_staff) as ws_staff:
+                _recv_event(ws_a, what="A snapshot")
+                _recv_event(ws_b, what="B snapshot")
+                _recv_event(ws_staff, what="staff snapshot")
+                appt_b = _book(client, customer2_headers, salon_barber.barber_id,
+                               salon_service.service_id, date_str, "10:00",
+                               salon_id=salon.salon_id)
+                qid_b = _find_queue_id(client, admin_headers, appt_b["appointment_id"])
+
+                push_a = _recv_event(ws_a, what="B-booking push to A")
+                assert push_a.get("event") == "queue.updated", push_a
+                data_a = _data_of(push_a)
+                assert data_a.get("appointment_id") != appt_b["appointment_id"], push_a
+                assert data_a.get("queue_id") != qid_b, push_a
+                assert "entries" not in data_a, f"A push leaks entry list: {push_a}"
+
+                push_b = _recv_event(ws_b, what="B-booking push to B (own)")
+                data_b = _data_of(push_b)
+                assert data_b.get("appointment_id") == appt_b["appointment_id"], push_b
+                assert data_b.get("queue_id") == qid_b, push_b
+
+                push_staff = _recv_event(ws_staff, what="B-booking push to staff")
+                data_s = _data_of(push_staff)
+                assert data_s.get("appointment_id") == appt_b["appointment_id"], push_staff
+                assert data_s.get("queue_id") == qid_b, push_staff
+
+                assert try_receive(ws_a, timeout=1.5) is None, "A got a duplicate push"
+                assert try_receive(ws_b, timeout=1.5) is None, "B got a duplicate push"
+                assert try_receive(ws_staff, timeout=1.5) is None, "staff got a duplicate push"

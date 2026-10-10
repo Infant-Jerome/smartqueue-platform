@@ -94,8 +94,16 @@ def build_event(
     queue_position: Any = None,
     estimated_wait_minutes: Any = None,
     confidence: Any = None,
+    customer_id: Any = None,
 ) -> dict:
-    """Build a scoped queue event envelope (pure data, no I/O)."""
+    """Build a scoped queue event envelope (pure data, no I/O).
+
+    ``customer_id`` is routing metadata only: the WS manager reads it to
+    scope per-recipient pushes (a customer socket receives another
+    customer's ids never). It is stripped from every wire payload by
+    ``app.ws.events.sanitize_payload`` (not allowlisted), so it never
+    reaches any client.
+    """
     return {
         "type": event_type,
         "version": 1,
@@ -114,6 +122,8 @@ def build_event(
             # Phase 5C (S2-Integrate): SAWTE confidence, forwarded verbatim
             # from the service layer (or None when unavailable). No calc here.
             "confidence": confidence,
+            # Owner for per-recipient WS scoping (never sent on the wire).
+            "customer_id": customer_id,
         },
     }
 
@@ -142,6 +152,9 @@ def event_from_rows(
         # the entry (transient attr set post-commit by queue_service) or via
         # explicit override -- verbatim, never computed here.
         "confidence": _g(entry, "confidence", None),
+        # Owner attribution for per-recipient WS scoping (routing metadata
+        # only; stripped from wire payloads by sanitize_payload).
+        "customer_id": _g(appointment, "customer_id", _g(entry, "customer_id", None)),
     }
     data.update({k: v for k, v in overrides.items() if v is not None})
     return build_event(event_type, **data)
