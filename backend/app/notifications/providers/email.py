@@ -23,6 +23,25 @@ def _safe_detail(exc: BaseException, limit: int = 200) -> str:
     return (text or type(exc).__name__)[:limit]
 
 
+def _dns_families(host: str, port: int) -> str:
+    """Resolved address mix, e.g. ``v4:2/v6:1`` (diagnostic only).
+
+    Never raises. DNS names/addresses are not secrets. When the connect
+    stage later fails, this tells whether DNS worked and which families
+    were even candidates (e.g. ``dns-fail:gaierror`` vs ``v4:0/v6:2``
+    vs ``v4:3/v6:0`` followed by TCP refusal).
+    """
+    try:
+        import socket as _socket
+
+        infos = _socket.getaddrinfo(host, port, type=_socket.SOCK_STREAM)
+        v4 = sum(1 for i in infos if i[0] == _socket.AF_INET)
+        v6 = sum(1 for i in infos if i[0] == _socket.AF_INET6)
+        return f"v4:{v4}/v6:{v6}"
+    except Exception as exc:  # DNS resolution itself failed
+        return f"dns-fail:{type(exc).__name__}"
+
+
 class MockEmailProvider(NotificationProvider):
     """Test/dev provider: records sends in-memory, always succeeds."""
 
@@ -93,7 +112,14 @@ class SmtpEmailProvider(NotificationProvider):
             # Staged so Render logs reveal WHERE it breaks: connect (DNS/TCP),
             # starttls (TLS handshake), login (SMTP auth), or send (submission).
             # Port 587 + STARTTLS is the correct explicit-TLS pattern.
+            # NOTE (Render free tier): platform blocks outbound SMTP ports
+            # 25/465/587, surfacing as OSError errno 101 at stage=connect.
+            # No code change can lift a platform egress block; the dns=
+            # field below proves it at runtime (DNS ok + TCP refused vs
+            # dns-fail).
             stage = "connect"
+            dns = "unknown"
+            dns = _dns_families(settings.EMAIL_HOST, port)
             with smtplib.SMTP(settings.EMAIL_HOST, port, timeout=10) as client:
                 stage = "starttls"
                 client.starttls()
@@ -105,8 +131,9 @@ class SmtpEmailProvider(NotificationProvider):
         except Exception as exc:
             # Host/port/type/detail only: never user/pass/OTP/token content.
             logger.warning(
-                "SmtpEmailProvider: send failed at stage=%s (host=%s port=%s): %s: %s",
+                "SmtpEmailProvider: send failed at stage=%s dns=%s (host=%s port=%s): %s: %s",
                 stage,
+                dns,
                 settings.EMAIL_HOST,
                 settings.EMAIL_PORT,
                 type(exc).__name__,

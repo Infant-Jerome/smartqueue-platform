@@ -833,3 +833,43 @@ def test_safe_detail_truncates_and_never_empty():
 
     assert _safe_detail(OSError("x" * 500)) == "x" * 200
     assert _safe_detail(ValueError("")) == "ValueError"
+
+
+def test_dns_families_reports_mix_and_failure(monkeypatch):
+    import socket
+
+    from app.notifications.providers.email import _dns_families
+
+    v4 = (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("1.2.3.4", 587))
+    v6 = (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("::1", 587, 0, 0))
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: [v4, v4, v6])
+    assert _dns_families("smtp.gmail.com", 587) == "v4:2/v6:1"
+
+    def _boom(*a, **k):
+        raise socket.gaierror(-2, "Name or service not known")
+
+    monkeypatch.setattr(socket, "getaddrinfo", _boom)
+    assert _dns_families("smtp.gmail.com", 587) == "dns-fail:gaierror"
+
+
+def test_smtp_connect_failure_log_includes_dns_mix(monkeypatch, caplog):
+    import socket
+
+    import app.core.config as _cfg
+    from app.notifications.providers.email import SmtpEmailProvider
+
+    v4 = (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("1.2.3.4", 587))
+
+    def _boom(*a, **k):
+        raise OSError(101, "Network is unreachable")
+
+    monkeypatch.setattr(_cfg, "get_settings", lambda: _smtp_test_settings())
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: [v4])
+    monkeypatch.setattr("smtplib.SMTP", _boom)
+    with caplog.at_level(logging.WARNING, logger="app.notifications.providers.email"):
+        res = SmtpEmailProvider().send(to="a@test.com", subject="s", body="b")
+    assert res.success is False
+    assert "stage=connect" in caplog.text
+    assert "dns=v4:1/v6:0" in caplog.text
+    assert "Network is unreachable" in caplog.text
+    assert "s3cr3t-pw-xyz-never-log" not in caplog.text
