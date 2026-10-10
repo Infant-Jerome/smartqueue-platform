@@ -761,3 +761,75 @@ def test_txn_success_booking_all_created(
             if r.get("appointment_id") == data["appointment_id"]]
     assert db_session.query(_N).filter(
         _N.appointment_id == data["appointment_id"]).count() >= 1
+
+
+def _smtp_test_settings():
+    import types
+
+    return types.SimpleNamespace(
+        EMAIL_ENABLED=True,
+        EMAIL_HOST="smtp.test.local",
+        EMAIL_PORT=587,
+        EMAIL_USER="sender@test.local",
+        EMAIL_PASS="s3cr3t-pw-xyz-never-log",
+        EMAIL_FROM="sender@test.local",
+    )
+
+
+def test_smtp_dns_failure_logs_stage_without_secrets(monkeypatch, caplog):
+    import socket
+
+    import app.core.config as _cfg
+    from app.notifications.providers.email import SmtpEmailProvider
+
+    def _boom(*a, **k):
+        raise socket.gaierror(-2, "Name or service not known")
+
+    monkeypatch.setattr(_cfg, "get_settings", lambda: _smtp_test_settings())
+    monkeypatch.setattr("smtplib.SMTP", _boom)
+    with caplog.at_level(logging.WARNING, logger="app.notifications.providers.email"):
+        res = SmtpEmailProvider().send(to="a@test.com", subject="s", body="b")
+    assert res.success is False
+    assert "stage=connect" in caplog.text
+    assert "gaierror" in caplog.text
+    assert "s3cr3t-pw-xyz-never-log" not in caplog.text
+    assert "s3cr3t-pw-xyz-never-log" not in (res.error or "")
+
+
+def test_smtp_auth_failure_logs_stage_without_secrets(monkeypatch, caplog):
+    import smtplib
+
+    import app.core.config as _cfg
+    from app.notifications.providers.email import SmtpEmailProvider
+
+    class _FakeSMTP:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def starttls(self):
+            return (220, "ready")
+
+        def login(self, *a, **k):
+            raise smtplib.SMTPAuthenticationError(535, b"5.7.8 Username and Password not accepted")
+
+    monkeypatch.setattr(_cfg, "get_settings", lambda: _smtp_test_settings())
+    monkeypatch.setattr("smtplib.SMTP", _FakeSMTP)
+    with caplog.at_level(logging.WARNING, logger="app.notifications.providers.email"):
+        res = SmtpEmailProvider().send(to="a@test.com", subject="s", body="b")
+    assert res.success is False
+    assert "stage=login" in caplog.text
+    assert "SMTPAuthenticationError" in caplog.text
+    assert "s3cr3t-pw-xyz-never-log" not in caplog.text
+
+
+def test_safe_detail_truncates_and_never_empty():
+    from app.notifications.providers.email import _safe_detail
+
+    assert _safe_detail(OSError("x" * 500)) == "x" * 200
+    assert _safe_detail(ValueError("")) == "ValueError"

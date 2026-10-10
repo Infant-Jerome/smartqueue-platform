@@ -9,6 +9,20 @@ from app.notifications.providers.base import NotificationProvider, Result
 logger = logging.getLogger(__name__)
 
 
+def _safe_detail(exc: BaseException, limit: int = 200) -> str:
+    """One-line exception detail safe for logs.
+
+    ``smtplib``/``socket``/``ssl`` errors carry errno + address info only;
+    the password is passed to ``login()`` but never echoed in exceptions.
+    Truncated to keep logs tidy. Never call with OTPs/tokens/passwords.
+    """
+    try:
+        text = str(exc).strip().replace("\n", " ").replace("\r", " ")
+    except Exception:
+        text = ""
+    return (text or type(exc).__name__)[:limit]
+
+
 class MockEmailProvider(NotificationProvider):
     """Test/dev provider: records sends in-memory, always succeeds."""
 
@@ -76,16 +90,26 @@ class SmtpEmailProvider(NotificationProvider):
             msg["From"] = settings.EMAIL_FROM or settings.EMAIL_USER
             msg["To"] = to
             port = int(settings.EMAIL_PORT or 587)
+            # Staged so Render logs reveal WHERE it breaks: connect (DNS/TCP),
+            # starttls (TLS handshake), login (SMTP auth), or send (submission).
+            # Port 587 + STARTTLS is the correct explicit-TLS pattern.
+            stage = "connect"
             with smtplib.SMTP(settings.EMAIL_HOST, port, timeout=10) as client:
+                stage = "starttls"
                 client.starttls()
+                stage = "login"
                 client.login(settings.EMAIL_USER, settings.EMAIL_PASS)
+                stage = "send"
                 client.send_message(msg)
             return Result(success=True, provider=self.name)
         except Exception as exc:
+            # Host/port/type/detail only: never user/pass/OTP/token content.
             logger.warning(
-                "SmtpEmailProvider: send failed (host=%s port=%s): %s",
+                "SmtpEmailProvider: send failed at stage=%s (host=%s port=%s): %s: %s",
+                stage,
                 settings.EMAIL_HOST,
                 settings.EMAIL_PORT,
                 type(exc).__name__,
+                _safe_detail(exc),
             )
             return Result(success=False, error=f"email send failed: {type(exc).__name__}", provider=self.name)
